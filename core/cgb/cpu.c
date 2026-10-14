@@ -2,7 +2,9 @@
 #include <stdio.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include "instructions.h"
+#include "memmap.h"
 
 struct typed_ptr {
     union {
@@ -11,6 +13,7 @@ struct typed_ptr {
         int8_t* s8;
         int16_t* s16;
         void* raw;
+        uint16_t addr;
     };
     enum ptr_type{
         NUL,
@@ -22,8 +25,8 @@ struct typed_ptr {
 };
 
 uint16_t tmp;
-struct typed_ptr enum_param(uint8_t* data, enum param p, struct registers* regs) {
-    struct typed_ptr res;
+struct typed_ptr enum_param(enum param p, struct registers* regs) {
+    struct typed_ptr res = (struct typed_ptr) {0};
     switch(p) {
         case A:
             res.u8 = &regs->a;
@@ -74,62 +77,74 @@ struct typed_ptr enum_param(uint8_t* data, enum param p, struct registers* regs)
             res.type = U16;
             break;
         case AH_C:
-            res.u8 = &data[regs->c + 0xFF00];
+            res.u8 = (uint8_t*)&tmp;
+            *res.u8 = memread(regs->c + 0xFF00);
             res.type = U8;
             break;
         case A_BC:
-            res.u8 = &data[regs->bc];
+            res.u8 = (uint8_t*)&tmp;
+            *res.u8 = memread(regs->bc);
             res.type = U8;
             break;
         case A_DE:
-            res.u8 = &data[regs->de];
+            res.u8 = (uint8_t*)&tmp;
+            *res.u8 = memread(regs->de);
             res.type = U8;
             break;
         case A_HL:
-            res.u8 = &data[regs->hl];
+            res.u8 = (uint8_t*)&tmp;
+            *res.u8 = memread(regs->hl);
             res.type = U8;
             break;
         case A_HLI:
-            res.u8 = &data[regs->hl];
+            res.u8 = (uint8_t*)&tmp;
+            *res.u8 = memread(regs->hl);
             regs->hl++;
             res.type = U8;
             break;
         case A_HLD:
-            res.u8 = &data[regs->hl];
+            res.u8 = (uint8_t*)&tmp;
+            *res.u8 = memread(regs->hl);
             regs->hl--;
             res.type = U8;
             break;
         case SP_SIMM8:
             res.u16 = &tmp;
-            *res.u16 = regs->sp + (int8_t)data[regs->pc++];
+            *res.u16 = regs->sp + (int8_t)memread(regs->pc++);
             res.type = U16;
             break;
         case IMM16:
-            res.u16 = (uint16_t*)&data[regs->pc];
+            res.u16 = &tmp;
+            *res.u16 = memread(regs->pc) | (memread(regs->pc + 1) << 8);
             res.type = U16;
             regs->pc += 2;
             break;
         case IMM8:
-            res.u8 = &data[regs->pc++];
+            res.u8 = (uint8_t*)&tmp;
+            *res.u8 = memread(regs->pc++);
             res.type = U8;
             break;
         case SIMM8:
-            res.s8 = (int8_t*)&data[regs->pc++];
+            res.s8 = (int8_t*)&tmp;
+            *res.s8 = memread(regs->pc++);
             res.type = S8;
             break;
         case A_IMM16:
-            res.u8 = &data[
-                *(uint16_t*)&data[regs->pc]
-            ];
+            res.u8 = (uint8_t*)&tmp;
+            *res.u8 = memread(
+                memread(regs->pc) | (memread(regs->pc + 1) << 8)
+            );
             res.type = U8;
             regs->pc += 2;
             break;
         case A_IMM8:
-            res.u8 = &data[data[regs->pc++]];
+            res.u8 = (uint8_t*)&tmp;
+            *res.u8 = memread(memread(regs->pc++));
             res.type = U8;
             break;
         case AH_IMM8:
-            res.u8 = &data[data[regs->pc++] + 0xFF00];
+            res.u8 = (uint8_t*)&tmp;
+            *res.u8 = memread(memread(regs->pc++) + 0xFF00);
             res.type = U8;
             break;
         default:
@@ -139,10 +154,10 @@ struct typed_ptr enum_param(uint8_t* data, enum param p, struct registers* regs)
     return res;
 }
 
-void run_insn(uint8_t* data, struct registers* regs) {
-    uint8_t opcode = data[regs->pc++];
+void run_insn(struct registers* regs) {
+    uint8_t opcode = memread(regs->pc++);
     struct insn i = INSNS[opcode];
-    struct typed_ptr p1 = enum_param(data, i.p1, regs);
+    struct typed_ptr p1 = enum_param(i.p1, regs);
     struct typed_ptr p2;
     if(i.p1 == SET_P2) {
         p2 = (struct typed_ptr) {
@@ -150,7 +165,7 @@ void run_insn(uint8_t* data, struct registers* regs) {
             p2.type = U8,
         };
     } else {
-        p2 = enum_param(data, i.p2, regs);
+        p2 = enum_param(i.p2, regs);
     }
     int scratch;
     switch(i.op) {
@@ -498,16 +513,16 @@ void run_insn(uint8_t* data, struct registers* regs) {
                     break;
                 default:
                     regs->sp -= 2;
-                    data[regs->sp] = regs->pc & 0xFF;
-                    data[regs->sp + 1] = regs->pc >> 8;
+                    memwrite(regs->sp, regs->pc & 0xFF);
+                    memwrite(regs->sp + 1, regs->pc >> 8);
                     regs->pc = *p1.u16;
                     break;
             }
             break;
 _do_call:
             regs->sp -= 2;
-            data[regs->sp] = regs->pc & 0xFF;
-            data[regs->sp + 1] = regs->pc >> 8;
+            memwrite(regs->sp, regs->pc & 0xFF);
+            memwrite(regs->sp + 1, regs->pc >> 8);
             regs->pc = *p2.u16;
             break;
         case RET:
@@ -534,17 +549,17 @@ _do_call:
             }
             break;
 _do_ret:
-            regs->pc = data[regs->sp] | (data[regs->sp + 1] << 8);
+            regs->pc = memread(regs->sp) | (memread(regs->sp + 1) << 8);
             regs->sp += 2;
             break;
         case POP:
-            *p1.u16 = data[regs->sp] | (data[regs->sp + 1] << 8);
+            *p1.u16 = memread(regs->sp) | (memread(regs->sp + 1) << 8);
             regs->sp += 2;
             break;
         case PUSH:
             regs->sp -= 2;
-            data[regs->sp] = *p1.u16 & 0xFF;
-            data[regs->sp + 1] = *p1.u16 >> 8;
+            memwrite(regs->sp, *p1.u16 & 0xFF);
+            memwrite(regs->sp + 1, *p1.u16 >> 8);
             break;
         case DI:
             regs->ime = false;
@@ -553,14 +568,14 @@ _do_ret:
             regs->ime = true;
             break;
         case RETI:
-            regs->pc = data[regs->sp] | (data[regs->sp + 1] << 8);
+            regs->pc = memread(regs->sp) | (memread(regs->sp + 1) << 8);
             regs->sp += 2;
             regs->ime = true;
             break;
         case RST:
             regs->sp -= 2;
-            data[regs->sp] = regs->pc & 0xFF;
-            data[regs->sp + 1] = regs->pc >> 8;
+            memwrite(regs->sp, regs->pc & 0xFF);
+            memwrite(regs->sp + 1, regs->pc >> 8);
             regs->pc = *p2.u16;
             break;
         case STOP:
@@ -579,12 +594,27 @@ _do_ret:
         );
 }
 
-void run(uint8_t* data, struct registers* regs) {
-    *regs = (struct registers) {0};
+void poweron(struct registers* regs) {
+    // NOTE: skipping boot ROM
+    *regs = (struct registers) {
+        .bc = 0x0013,
+        .de = 0x00D8,
+        .hl = 0x014D,
+        .af = 0x01B0,
+        .sp = 0xFFFE,
+        .pc = 0x0100,
+    };
+    init_regs();
+    memwrite(REG_BANK, 0x01);
+    memwrite(REG_DIV, 0xAB);
+    memwrite(REG_P1, 0xCF);
+}
+
+void run(struct registers* regs) {
     while(1) {
         switch(regs->state) {
             case S_RUN:
-                run_insn(data, regs);
+                run_insn(regs);
                 break;
             case S_STOP:
                 // TODO: wait for joypad button

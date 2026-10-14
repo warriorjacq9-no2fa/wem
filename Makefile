@@ -1,27 +1,28 @@
 CC = gcc
-CFLAGS = -g -Wall -Werror -O0
+CFLAGS = -g -Wall -Werror -O0 -Icore/cgb/include -Ifrontend/pc/include -pthread
 
 LD = gcc
-LDFLAGS = -g
+LDFLAGS = -g -lSDL3 -pthread
 
-OBJS = \
-core/cgb/cpu.o \
-core/cgb/instructions.o \
-main.o
+OBJS = main.o
 
-HEADERS = \
-core/cgb/cpu.h \
-core/cgb/instructions.h
-
-.PHONY: all clean
+.PHONY: all clean core/cgb/libcore.a frontend/pc/libgraphics.a
 
 all: wem
 
-wem: $(OBJS)
+wem: $(OBJS) core/cgb/libcore.a frontend/pc/libgraphics.a
 	$(LD) $(LDFLAGS) $^ -o $@
 
 clean:
-	rm $(OBJS) wem
+	rm -f $(OBJS) wem
+	$(MAKE) -C core/cgb clean
+	$(MAKE) -C frontend/pc clean
 
 %.o: %.c $(HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
+
+core/cgb/libcore.a:
+	$(MAKE) -C core/cgb libcore.a
+
+frontend/pc/libgraphics.a:
+	$(MAKE) -C frontend/pc libgraphics.a

@@ -28,7 +28,6 @@ struct registers {
         uint16_t af;
     };
     uint16_t sp, pc;
-    uint16_t iif, iie;
     bool ime;
     enum cpu_state state;
 };
@@ -37,10 +36,5 @@ struct registers {
 #define FLAG_N 0b01000000
 #define FLAG_H 0b00100000
 #define FLAG_C 0b00010000
-
-#define ROM_SZ 32768
-#define MEM_SZ 65536
-
-void run(uint8_t* data, struct registers* regs);
 
 #endif

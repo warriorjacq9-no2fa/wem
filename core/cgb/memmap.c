@@ -1,20 +1,25 @@
-#include "registers.h"
+#include "memmap.h"
+#include <string.h>
+#include "ppu.h"
 
-static uint8_t reg_bank;
-static uint8_t reg_dma;
-static uint8_t
-    reg_ppu_lcdc, reg_ppu_stat,
-    reg_ppu_scy, reg_ppu_scx,
-    reg_ppu_ly, reg_ppu_lyc;
 static uint8_t reg_p1;
 static uint8_t reg_sb, reg_sc;
+static uint8_t
+    reg_div, reg_tima,
+    reg_tma, reg_tac;
+static uint8_t reg_if;
+static uint8_t reg_bank;
+static uint8_t reg_dma;
+static uint8_t reg_ie;
 
 static uint8_t rom_00[16384];
 static uint8_t rom_nn[16384];
 static uint8_t vram[8192];
 static uint8_t eram[8192];
+static uint8_t wram0[4096];
 static uint8_t wram1[4096];
-static uint8_t wram2[4096];
+static uint8_t oam[160];
+static uint8_t hram[128];
 
 static const uint8_t cgb_boot[]  = {
   0x31, 0xfe, 0xff, 0x3e, 0x02, 0xc3, 0x7c, 0x00, 0xd3, 0x00, 0x98, 0xa0, 0x12, 0xd3, 0x00, 0x80, 
@@ -167,32 +172,39 @@ void init_regs() {
     reg_bank    = 0xFE;
     reg_dma     = 0x00;
 
-    reg_ppu_lcdc= 0x00;
-    reg_ppu_stat= 0x00;
-    reg_ppu_scy = 0x00;
-    reg_ppu_scx = 0x00;
-    reg_ppu_ly  = 0x00;
-    reg_ppu_lyc = 0x00;
-
     reg_p1      = 0x00;
 
     reg_sb      = 0x00;
     reg_sc      = 0x00;
 }
 
-uint8_t read(uint16_t addr) {
+void load_rom(uint8_t *data) {
+    memcpy(rom_00, data, 16384);
+    memcpy(rom_nn, &data[16384], 16384);
+}
+
+uint8_t memread(uint16_t addr) {
     switch(addr) {
-        case REG_BANK:      return reg_bank;
-        case REG_DMA:       return reg_dma;
+        case REG_P1:        return reg_p1 & 0b11001111;
+        case REG_SB:        return reg_sb;
+        case REG_SC:        return reg_sc;
+        case REG_DIV:       return reg_div;
+        case REG_TIMA:      return reg_tima;
+        case REG_TMA:       return reg_tma;
+        case REG_TAC:       return reg_tac;
+        case REG_IF:        return reg_if;
         case REG_PPU_LCDC:  return reg_ppu_lcdc;
         case REG_PPU_STAT:  return reg_ppu_stat;
         case REG_PPU_SCY:   return reg_ppu_scy;
         case REG_PPU_SCX:   return reg_ppu_scx;
         case REG_PPU_LY:    return reg_ppu_ly;
         case REG_PPU_LYC:   return reg_ppu_lyc;
-        case REG_P1:        return reg_p1;
-        case REG_SB:        return reg_sb;
-        case REG_SC:        return reg_sc;
+        case REG_PPU_BGP:   return reg_ppu_bgp;
+        case REG_PPU_OBP0:  return reg_ppu_obp0;
+        case REG_PPU_OBP1:  return reg_ppu_obp1;
+        case REG_DMA:       return reg_dma;
+        case REG_BANK:      return reg_bank;
+        case REG_IE:        return reg_ie;
         default:
             if((reg_bank & 0x01) && (addr < 0x0100 || (addr > 0x01FF && addr < 0x0900))) {
                 return cgb_boot[addr];
@@ -205,24 +217,57 @@ uint8_t read(uint16_t addr) {
                     return vram[addr];
                 else if(addr < 0xC000)
                     return eram[addr];
+                else if(addr < 0xD000)
+                    return wram0[addr];
+                else if(addr < 0xE000)
+                    return wram1[addr];
+                else if(addr < 0xFE00)
+                    return memread(addr - 0x2000); // Echo RAM from 0xC000
+                else if(addr < 0xFEA0)
+                    return oam[addr];
+                else if(addr > 0xFF7F && addr < 0xFFFF)
+                    return hram[addr];
             }
+            return 0;
     }
 }
 
-void write(uint16_t addr, uint8_t val) {
+void memwrite(uint16_t addr, uint8_t val) {
     switch(addr) {
-        case REG_BANK:      reg_bank = val; break;
-        case REG_DMA:       reg_dma = val; break;
+        case REG_P1:        reg_p1 = val & 0b00110000; break;
+        case REG_SB:        reg_sb = val; break;
+        case REG_SC:        reg_sc = val & 0b10000001; break;
+        case REG_DIV:       reg_div = val; break;
+        case REG_TIMA:      reg_tima = val; break;
+        case REG_TMA:       reg_tma = val; break;
+        case REG_TAC:       reg_tac = val; break;
+        case REG_IF:        reg_if = val; break;
         case REG_PPU_LCDC:  reg_ppu_lcdc = val; break;
         case REG_PPU_STAT:  reg_ppu_stat = val & 0b01111000; break;
         case REG_PPU_SCY:   reg_ppu_scy = val; break;
         case REG_PPU_SCX:   reg_ppu_scx = val; break;
         case REG_PPU_LY:    break;
         case REG_PPU_LYC:   reg_ppu_lyc = val; break;
-        case REG_P1:        reg_p1 = val & 0b00110000; break;
-        case REG_SB:        reg_sb = val; break;
-        case REG_SC:        reg_sc = val & 0b10000001; break;
+        case REG_PPU_BGP:   reg_ppu_bgp = val; break;
+        case REG_PPU_OBP0:  reg_ppu_obp0 = val; break;
+        case REG_PPU_OBP1:  reg_ppu_obp1 = val; break;
+        case REG_DMA:       reg_dma = val; break;
+        case REG_BANK:      reg_bank = val & 0b00000001; break;
+        case REG_IE:        reg_ie = val; break;
         default:
-            if(addr > 0x7FFF)
+            if(addr > 0x7FFF && addr < 0xA000)
+                vram[addr] = val;
+            else if(addr < 0xC000)
+                eram[addr] = val;
+            else if(addr < 0xD000)
+                wram0[addr] = val;
+            else if(addr < 0xE000)
+                wram1[addr] = val;
+            else if(addr < 0xFE00)
+                memwrite(addr - 0x2000, val); // Echo RAM from 0xC000
+            else if(addr < 0xFEA0)
+                oam[addr] = val; // TODO: check PPU state
+            else if(addr > 0xFF7F && addr < 0xFFFF)
+                hram[addr] = val;
     }
 }

@@ -213,9 +213,10 @@ uint8_t memread(uint16_t addr) {
                     return rom_00[addr];
                 else if(addr < 0x8000)
                     return rom_nn[addr];
-                else if(addr < 0xA000)
-                    return vram[addr];
-                else if(addr < 0xC000)
+                else if(addr < 0xA000) {
+                    if(vram_block) return 0xFF;
+                    else return vram[addr];
+                } else if(addr < 0xC000)
                     return eram[addr];
                 else if(addr < 0xD000)
                     return wram0[addr];
@@ -223,9 +224,10 @@ uint8_t memread(uint16_t addr) {
                     return wram1[addr];
                 else if(addr < 0xFE00)
                     return memread(addr - 0x2000); // Echo RAM from 0xC000
-                else if(addr < 0xFEA0)
-                    return oam[addr];
-                else if(addr > 0xFF7F && addr < 0xFFFF)
+                else if(addr < 0xFEA0) {
+                    if(oam_block) return 0xFF;
+                    else return oam[addr];
+                } else if(addr > 0xFF7F && addr < 0xFFFF)
                     return hram[addr];
             }
             return 0;
@@ -255,7 +257,7 @@ void memwrite(uint16_t addr, uint8_t val) {
         case REG_BANK:      reg_bank = val & 0b00000001; break;
         case REG_IE:        reg_ie = val; break;
         default:
-            if(addr > 0x7FFF && addr < 0xA000)
+            if(addr > 0x7FFF && addr < 0xA000 && !vram_block)
                 vram[addr] = val;
             else if(addr < 0xC000)
                 eram[addr] = val;
@@ -265,7 +267,7 @@ void memwrite(uint16_t addr, uint8_t val) {
                 wram1[addr] = val;
             else if(addr < 0xFE00)
                 memwrite(addr - 0x2000, val); // Echo RAM from 0xC000
-            else if(addr < 0xFEA0)
+            else if(addr < 0xFEA0 && !vram_block)
                 oam[addr] = val; // TODO: check PPU state
             else if(addr > 0xFF7F && addr < 0xFFFF)
                 hram[addr] = val;

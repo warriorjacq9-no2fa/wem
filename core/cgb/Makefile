@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -g -Wall -Werror -O0
+CFLAGS = -g -Wall -Werror -O2 -DDEBUG=$(DEBUG)
 
 CORE_OBJS = \
 cpu.o \

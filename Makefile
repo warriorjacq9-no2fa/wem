@@ -1,5 +1,7 @@
+DEBUG=1
+
 CC = gcc
-CFLAGS = -g -Wall -Werror -O0 -Icore/cgb/include -Ifrontend/pc/include -pthread
+CFLAGS = -g -Wall -Werror -O2 -Icore/cgb/include -Ifrontend/pc/include -pthread
 
 LD = gcc
 LDFLAGS = -g -lSDL3 -pthread
@@ -22,7 +24,7 @@ clean:
 	$(CC) $(CFLAGS) -c $< -o $@
 
 core/cgb/libcore.a:
-	$(MAKE) -C core/cgb libcore.a
+	$(MAKE) -C core/cgb libcore.a DEBUG=$(DEBUG)
 
 frontend/pc/libgraphics.a:
-	$(MAKE) -C frontend/pc libgraphics.a
+	$(MAKE) -C frontend/pc libgraphics.a DEBUG=$(DEBUG)

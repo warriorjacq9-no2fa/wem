@@ -24,6 +24,109 @@ struct typed_ptr {
     } type;
 };
 
+#if DEBUG
+static const char* const insn_names[] = {
+    "NOP",
+    "LD",
+    "INC",
+    "DEC",
+    "ADD",
+    "ADC",
+    "SUB",
+    "SBC",
+    "AND",
+    "OR",
+    "XOR",
+    "CP",
+    "RLCA",
+    "RRCA",
+    "RLA",
+    "RRA",
+    "DAA",
+    "CPL",
+    "SCF",
+    "CCF",
+    "JR",
+    "JP",
+    "CALL",
+    "RET",
+    "POP",
+    "PUSH",
+    "DI",
+    "EI",
+    "RETI",
+    "RST",
+    "STOP",
+    "HALT",
+    "PREFIX"
+};
+static const char* const pfx_names[] = {
+    "RLC",
+    "RRC",
+    "RL",
+    "RR",
+    "SLA",
+    "SRA",
+    "SWAP",
+    "BIT",
+    "BIT",
+    "BIT",
+    "BIT",
+    "BIT",
+    "BIT",
+    "BIT",
+    "BIT",
+    "RES",
+    "RES",
+    "RES",
+    "RES",
+    "RES",
+    "RES",
+    "RES",
+    "RES",
+    "SET",
+    "SET",
+    "SET",
+    "SET",
+    "SET",
+    "SET",
+    "SET",
+};
+static const char* const param_names[] = {
+    "",
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "H",
+    "L",
+    "BC",
+    "DE",
+    "HL",
+    "AF",
+    "SP",
+    "[C + 0xFF00]",
+    "[BC]",
+    "[DE]",
+    "[HL]",
+    "[HL+]",
+    "[HL-]",
+    "SP + s8",
+    "n16",
+    "n8",
+    "s8",
+    "[a16]",
+    "[a8]",
+    "[a8 + 0xFF00]",
+    "NZ",
+    "NC",
+    "Z",
+    "C",
+    ""
+};
+#endif
+
 uint16_t tmp;
 struct typed_ptr enum_param(enum param p, struct registers* regs) {
     struct typed_ptr res = (struct typed_ptr) {0};
@@ -154,8 +257,227 @@ struct typed_ptr enum_param(enum param p, struct registers* regs) {
     return res;
 }
 
+bool pfx;
+
+void run_insn_pfx(struct registers* regs, uint8_t opcode) {
+    pfx = false;
+    uint8_t* param = NULL;
+    int scratch;
+    switch(opcode & 0x07) {
+        case 0x00: param = &regs->b; break;
+        case 0x01: param = &regs->c; break;
+        case 0x02: param = &regs->d; break;
+        case 0x03: param = &regs->e; break;
+        case 0x04: param = &regs->h; break;
+        case 0x05: param = &regs->l; break;
+        case 0x06: return; // TODO: [HL] param
+        case 0x07: param = &regs->a; break;
+        default: break;
+    }
+#if DEBUG
+    char* pname = "";
+    switch(opcode & 0x07) {
+        case 0x00: pname = "B"; break;
+        case 0x01: pname = "C"; break;
+        case 0x02: pname = "D"; break;
+        case 0x03: pname = "E"; break;
+        case 0x04: pname = "H"; break;
+        case 0x05: pname = "L"; break;
+        case 0x06: pname = "[HL]"; break;
+        case 0x07: pname = "A"; break;
+        default: break;
+    }
+    fprintf(stderr,
+        "Running prefixed %s (%02x) %s (%02x)\n",
+        pfx_names[(opcode & 0xF8) >> 3], opcode, 
+        pname, (param != NULL ? *param : 0)
+    );
+#endif
+    switch(opcode & 0xF8) {
+        case 0x00: // RLC
+            regs->af &= ~(FLAG_N | FLAG_H);
+            scratch = *param << 1;
+            if(*param & 0x80) {
+                regs->af |= FLAG_C;
+                scratch |= 0x01;
+            } else {
+                regs->af &= ~FLAG_C;
+                scratch &= ~0x01;
+            }
+            *param = scratch;
+
+            if(*param == 0)
+                regs->af |= FLAG_Z;
+            else
+                regs->af &= ~FLAG_Z;
+            break;
+        case 0x08: // RRC
+            regs->af &= ~(FLAG_N | FLAG_H);
+            scratch = *param >> 1;
+            if(*param & 0x01) {
+                regs->af |= FLAG_C;
+                scratch |= 0x80;
+            } else {
+                regs->af &= ~FLAG_C;
+                scratch &= ~0x80;
+            }
+            *param = scratch;
+
+            if(*param == 0)
+                regs->af |= FLAG_Z;
+            else
+                regs->af &= ~FLAG_Z;
+            break;
+        case 0x10: // RL
+            regs->af &= ~(FLAG_N | FLAG_H);
+            scratch = *param << 1;
+            if(regs->af & FLAG_C)
+                scratch |= 0x01;
+            else
+                scratch &= ~0x01;
+            
+            if(*param & 0x80)
+                regs->af |= FLAG_C;
+            else
+                regs->af &= ~FLAG_C;
+            
+            *param = scratch;
+
+            if(*param == 0)
+                regs->af |= FLAG_Z;
+            else
+                regs->af &= ~FLAG_Z;
+            break;
+        case 0x18: // RR
+            regs->af &= ~(FLAG_N | FLAG_H);
+            scratch = *param >> 1;
+            if(regs->af & FLAG_C)
+                scratch |= 0x80;
+            else
+                scratch &= ~0x80;
+            
+            if(*param & 0x01)
+                regs->af |= FLAG_C;
+            else
+                regs->af &= ~FLAG_C;
+            
+            *param = scratch;
+
+            if(*param == 0)
+                regs->af |= FLAG_Z;
+            else
+                regs->af &= ~FLAG_Z;
+            break;
+        case 0x20: // SLA
+            regs->af &= ~(FLAG_N | FLAG_H);
+            scratch = *param << 1;
+            
+            if(*param & 0x80)
+                regs->af |= FLAG_C;
+            else
+                regs->af &= ~FLAG_C;
+            
+            *param = scratch;
+
+            if(*param == 0)
+                regs->af |= FLAG_Z;
+            else
+                regs->af &= ~FLAG_Z;
+            break;
+        case 0x28: // SRA
+            regs->af &= ~(FLAG_N | FLAG_H);
+            scratch = *param >> 1 | (*param & 0x80);
+            
+            if(*param & 0x01)
+                regs->af |= FLAG_C;
+            else
+                regs->af &= ~FLAG_C;
+            
+            *param = scratch;
+
+            if(*param == 0)
+                regs->af |= FLAG_Z;
+            else
+                regs->af &= ~FLAG_Z;
+            break;
+        case 0x30: // SWAP
+            regs->af &= ~(FLAG_N | FLAG_H | FLAG_C);
+            scratch = *param >> 4;
+            *param <<= 4;
+            *param |= scratch & 0x0F;
+
+            if(*param == 0)
+                regs->af |= FLAG_Z;
+            else
+                regs->af &= ~FLAG_Z;
+            break;
+        case 0x38: // SRL
+            regs->af &= ~(FLAG_N | FLAG_H);
+            scratch = *param >> 1;
+            
+            if(*param & 0x01)
+                regs->af |= FLAG_C;
+            else
+                regs->af &= ~FLAG_C;
+            
+            *param = scratch;
+
+            if(*param == 0)
+                regs->af |= FLAG_Z;
+            else
+                regs->af &= ~FLAG_Z;
+            break;
+        // BIT
+        case 0x40: scratch = 0x01; goto _do_bit;
+        case 0x48: scratch = 0x02; goto _do_bit;
+        case 0x50: scratch = 0x04; goto _do_bit;
+        case 0x58: scratch = 0x08; goto _do_bit;
+        case 0x60: scratch = 0x10; goto _do_bit;
+        case 0x68: scratch = 0x20; goto _do_bit;
+        case 0x70: scratch = 0x40; goto _do_bit;
+        case 0x78: scratch = 0x80; goto _do_bit;
+_do_bit:
+            if(*param & (scratch & 0xFF))
+                regs->af |= FLAG_Z;
+            else
+                regs->af &= ~FLAG_Z;
+
+            regs->af &= ~FLAG_N;
+            regs->af |= FLAG_H;
+            break;
+        // RES
+        case 0x80: scratch = 0x01; goto _do_res;
+        case 0x88: scratch = 0x02; goto _do_res;
+        case 0x90: scratch = 0x04; goto _do_res;
+        case 0x98: scratch = 0x08; goto _do_res;
+        case 0xA0: scratch = 0x10; goto _do_res;
+        case 0xA8: scratch = 0x20; goto _do_res;
+        case 0xB0: scratch = 0x40; goto _do_res;
+        case 0xB8: scratch = 0x80; goto _do_res;
+_do_res:
+            *param &= ~(scratch & 0xFF);
+            break;
+        // SET
+        case 0xC0: scratch = 0x01; goto _do_set;
+        case 0xC8: scratch = 0x02; goto _do_set;
+        case 0xD0: scratch = 0x04; goto _do_set;
+        case 0xD8: scratch = 0x08; goto _do_set;
+        case 0xE0: scratch = 0x10; goto _do_set;
+        case 0xE8: scratch = 0x20; goto _do_set;
+        case 0xF0: scratch = 0x40; goto _do_set;
+        case 0xF8: scratch = 0x80; goto _do_set;
+_do_set:
+            *param |= scratch & 0xFF;
+            break;
+    }
+}
+
 void run_insn(struct registers* regs) {
     uint8_t opcode = memread(regs->pc++);
+    if(pfx) {
+        run_insn_pfx(regs, opcode);
+        return;
+    }
     struct insn i = INSNS[opcode];
     struct typed_ptr p1 = enum_param(i.p1, regs);
     struct typed_ptr p2;
@@ -168,6 +490,13 @@ void run_insn(struct registers* regs) {
         p2 = enum_param(i.p2, regs);
     }
     int scratch;
+#if DEBUG
+    fprintf(stderr,
+        "Running %s (%02x) %s (%04x), %s (%04x)\n",
+        insn_names[i.op], opcode, 
+        param_names[i.p1], p1.raw != NULL ? *p1.u16 : 0, param_names[i.p2], p2.raw != NULL ? *p2.u16 : 0
+    );
+#endif
     switch(i.op) {
         case NOP:
             break;
@@ -468,6 +797,7 @@ void run_insn(struct registers* regs) {
                         regs->pc += *p2.s8;
                     break;
                 default:
+                    regs->pc = *p1.u16;
                     break;
             }
             break;
@@ -490,6 +820,7 @@ void run_insn(struct registers* regs) {
                         regs->pc = *p2.u16;
                     break;
                 default:
+                    regs->pc = *p1.u16;
                     break;
             }
             break;
@@ -584,44 +915,36 @@ _do_ret:
         case HALT:
             regs->state = S_HALT;
             break;
+        case PREFIX:
+            pfx = true;
+            break;
         default:
             break;
     }
-    if(i.op != NOP)
+    if(i.op != NOP) {
         printf(
-            "bc: %04x de: %04x hl: %04x af: %04x sp: %04x pc %04x ime: %d state: %d\r",
-            regs->bc, regs->de, regs->hl, regs->af, regs->sp, regs->pc, regs->ime, regs->state
+            "bc: %04x de: %04x hl: %04x af: %04x sp: %04x pc: %04x ime: %d state: %d prefix: %d\r",
+            regs->bc, regs->de, regs->hl, regs->af, regs->sp, regs->pc, regs->ime, regs->state, pfx
         );
+#if DEBUG
+        fprintf(stderr,
+            "bc: %04x de: %04x hl: %04x af: %04x sp: %04x pc: %04x ime: %d state: %d prefix: %d\n",
+            regs->bc, regs->de, regs->hl, regs->af, regs->sp, regs->pc, regs->ime, regs->state, pfx
+        );
+#endif
+    }
 }
 
-void poweron(struct registers* regs) {
-    // NOTE: skipping boot ROM
-    *regs = (struct registers) {
-        .bc = 0x0013,
-        .de = 0x00D8,
-        .hl = 0x014D,
-        .af = 0x01B0,
-        .sp = 0xFFFE,
-        .pc = 0x0100,
-    };
-    init_regs();
-    memwrite(REG_BANK, 0x01);
-    memwrite(REG_DIV, 0xAB);
-    memwrite(REG_P1, 0xCF);
-}
-
-void run(struct registers* regs) {
-    while(1) {
-        switch(regs->state) {
-            case S_RUN:
-                run_insn(regs);
-                break;
-            case S_STOP:
-                // TODO: wait for joypad button
-                break;
-            case S_HALT:
-                // TODO: wait for interrupt
-                break;
-        }
+void run_cpu(struct registers* regs) {
+    switch(regs->state) {
+        case S_RUN:
+            run_insn(regs);
+            break;
+        case S_STOP:
+            // TODO: wait for joypad button
+            break;
+        case S_HALT:
+            // TODO: wait for interrupt
+            break;
     }
 }

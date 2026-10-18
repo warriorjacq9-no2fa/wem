@@ -1,6 +1,3 @@
-CC = gcc
-CFLAGS = -g -Wall -Werror -O2 -DDEBUG=$(DEBUG)
-
 CORE_OBJS = \
 cpu.o \
 instructions.o \

@@ -1,6 +1,3 @@
-CC = gcc
-CFLAGS = -g -Wall -Werror -O2
-
 GFX_OBJS = \
 graphics.o
 

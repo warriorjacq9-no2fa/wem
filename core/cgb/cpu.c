@@ -293,182 +293,364 @@ void run_insn_pfx(struct registers* regs, uint8_t opcode) {
         pname, (param != NULL ? *param : 0)
     );
 #endif
-    switch(opcode & 0xF8) {
-        case 0x00: // RLC
-            regs->af &= ~(FLAG_N | FLAG_H);
-            scratch = *param << 1;
-            if(*param & 0x80) {
-                regs->af |= FLAG_C;
-                scratch |= 0x01;
-            } else {
-                regs->af &= ~FLAG_C;
-                scratch &= ~0x01;
-            }
-            *param = scratch;
+    if((opcode & 0x07) == 0x06) {
+        uint8_t val = memread(regs->hl);
+        switch(opcode & 0xF8) {
+            case 0x00: // RLC
+                regs->af &= ~(FLAG_N | FLAG_H);
+                scratch = val << 1;
+                if(val & 0x80) {
+                    regs->af |= FLAG_C;
+                    scratch |= 0x01;
+                } else {
+                    regs->af &= ~FLAG_C;
+                    scratch &= ~0x01;
+                }
+                memwrite(regs->hl, scratch);
 
-            if(*param == 0)
-                regs->af |= FLAG_Z;
-            else
-                regs->af &= ~FLAG_Z;
-            break;
-        case 0x08: // RRC
-            regs->af &= ~(FLAG_N | FLAG_H);
-            scratch = *param >> 1;
-            if(*param & 0x01) {
-                regs->af |= FLAG_C;
-                scratch |= 0x80;
-            } else {
-                regs->af &= ~FLAG_C;
-                scratch &= ~0x80;
-            }
-            *param = scratch;
+                if(scratch == 0)
+                    regs->af |= FLAG_Z;
+                else
+                    regs->af &= ~FLAG_Z;
+                break;
+            case 0x08: // RRC
+                regs->af &= ~(FLAG_N | FLAG_H);
+                scratch = val >> 1;
+                if(val & 0x01) {
+                    regs->af |= FLAG_C;
+                    scratch |= 0x80;
+                } else {
+                    regs->af &= ~FLAG_C;
+                    scratch &= ~0x80;
+                }
+                memwrite(regs->hl, scratch);
 
-            if(*param == 0)
-                regs->af |= FLAG_Z;
-            else
-                regs->af &= ~FLAG_Z;
-            break;
-        case 0x10: // RL
-            regs->af &= ~(FLAG_N | FLAG_H);
-            scratch = *param << 1;
-            if(regs->af & FLAG_C)
-                scratch |= 0x01;
-            else
-                scratch &= ~0x01;
-            
-            if(*param & 0x80)
-                regs->af |= FLAG_C;
-            else
-                regs->af &= ~FLAG_C;
-            
-            *param = scratch;
+                if(scratch == 0)
+                    regs->af |= FLAG_Z;
+                else
+                    regs->af &= ~FLAG_Z;
+                break;
+            case 0x10: // RL
+                regs->af &= ~(FLAG_N | FLAG_H);
+                scratch = val << 1;
+                if(regs->af & FLAG_C)
+                    scratch |= 0x01;
+                else
+                    scratch &= ~0x01;
+                
+                if(val & 0x80)
+                    regs->af |= FLAG_C;
+                else
+                    regs->af &= ~FLAG_C;
+                
+                memwrite(regs->hl, scratch);
 
-            if(*param == 0)
-                regs->af |= FLAG_Z;
-            else
-                regs->af &= ~FLAG_Z;
-            break;
-        case 0x18: // RR
-            regs->af &= ~(FLAG_N | FLAG_H);
-            scratch = *param >> 1;
-            if(regs->af & FLAG_C)
-                scratch |= 0x80;
-            else
-                scratch &= ~0x80;
-            
-            if(*param & 0x01)
-                regs->af |= FLAG_C;
-            else
-                regs->af &= ~FLAG_C;
-            
-            *param = scratch;
+                if(scratch == 0)
+                    regs->af |= FLAG_Z;
+                else
+                    regs->af &= ~FLAG_Z;
+                break;
+            case 0x18: // RR
+                regs->af &= ~(FLAG_N | FLAG_H);
+                scratch = val >> 1;
+                if(regs->af & FLAG_C)
+                    scratch |= 0x80;
+                else
+                    scratch &= ~0x80;
+                
+                if(val & 0x01)
+                    regs->af |= FLAG_C;
+                else
+                    regs->af &= ~FLAG_C;
+                
+                memwrite(regs->hl, scratch);
 
-            if(*param == 0)
-                regs->af |= FLAG_Z;
-            else
-                regs->af &= ~FLAG_Z;
-            break;
-        case 0x20: // SLA
-            regs->af &= ~(FLAG_N | FLAG_H);
-            scratch = *param << 1;
-            
-            if(*param & 0x80)
-                regs->af |= FLAG_C;
-            else
-                regs->af &= ~FLAG_C;
-            
-            *param = scratch;
+                if(scratch == 0)
+                    regs->af |= FLAG_Z;
+                else
+                    regs->af &= ~FLAG_Z;
+                break;
+            case 0x20: // SLA
+                regs->af &= ~(FLAG_N | FLAG_H);
+                scratch = val << 1;
+                
+                if(val & 0x80)
+                    regs->af |= FLAG_C;
+                else
+                    regs->af &= ~FLAG_C;
+                
+                memwrite(regs->hl, scratch);
 
-            if(*param == 0)
-                regs->af |= FLAG_Z;
-            else
-                regs->af &= ~FLAG_Z;
-            break;
-        case 0x28: // SRA
-            regs->af &= ~(FLAG_N | FLAG_H);
-            scratch = *param >> 1 | (*param & 0x80);
-            
-            if(*param & 0x01)
-                regs->af |= FLAG_C;
-            else
-                regs->af &= ~FLAG_C;
-            
-            *param = scratch;
+                if(scratch == 0)
+                    regs->af |= FLAG_Z;
+                else
+                    regs->af &= ~FLAG_Z;
+                break;
+            case 0x28: // SRA
+                regs->af &= ~(FLAG_N | FLAG_H);
+                scratch = val >> 1 | (*param & 0x80);
+                
+                if(val & 0x01)
+                    regs->af |= FLAG_C;
+                else
+                    regs->af &= ~FLAG_C;
+                
+                memwrite(regs->hl, scratch);
 
-            if(*param == 0)
-                regs->af |= FLAG_Z;
-            else
-                regs->af &= ~FLAG_Z;
-            break;
-        case 0x30: // SWAP
-            regs->af &= ~(FLAG_N | FLAG_H | FLAG_C);
-            scratch = *param >> 4;
-            *param <<= 4;
-            *param |= scratch & 0x0F;
+                if(val == 0)
+                    regs->af |= FLAG_Z;
+                else
+                    regs->af &= ~FLAG_Z;
+                break;
+            case 0x30: // SWAP
+                regs->af &= ~(FLAG_N | FLAG_H | FLAG_C);
+                scratch = val >> 4;
+                scratch |= ( val << 4) & 0xF0;
 
-            if(*param == 0)
-                regs->af |= FLAG_Z;
-            else
-                regs->af &= ~FLAG_Z;
-            break;
-        case 0x38: // SRL
-            regs->af &= ~(FLAG_N | FLAG_H);
-            scratch = *param >> 1;
-            
-            if(*param & 0x01)
-                regs->af |= FLAG_C;
-            else
-                regs->af &= ~FLAG_C;
-            
-            *param = scratch;
+                memwrite(regs->hl, scratch);
 
-            if(*param == 0)
-                regs->af |= FLAG_Z;
-            else
-                regs->af &= ~FLAG_Z;
-            break;
-        // BIT
-        case 0x40: scratch = 0x01; goto _do_bit;
-        case 0x48: scratch = 0x02; goto _do_bit;
-        case 0x50: scratch = 0x04; goto _do_bit;
-        case 0x58: scratch = 0x08; goto _do_bit;
-        case 0x60: scratch = 0x10; goto _do_bit;
-        case 0x68: scratch = 0x20; goto _do_bit;
-        case 0x70: scratch = 0x40; goto _do_bit;
-        case 0x78: scratch = 0x80; goto _do_bit;
+                if(scratch == 0)
+                    regs->af |= FLAG_Z;
+                else
+                    regs->af &= ~FLAG_Z;
+                break;
+            case 0x38: // SRL
+                regs->af &= ~(FLAG_N | FLAG_H);
+                scratch = val >> 1;
+                
+                if(val & 0x01)
+                    regs->af |= FLAG_C;
+                else
+                    regs->af &= ~FLAG_C;
+                
+                memwrite(regs->hl, scratch);
+
+                if(scratch == 0)
+                    regs->af |= FLAG_Z;
+                else
+                    regs->af &= ~FLAG_Z;
+                break;
+            // BIT
+            case 0x40: scratch = 0x01; goto _do_bit_hl;
+            case 0x48: scratch = 0x02; goto _do_bit_hl;
+            case 0x50: scratch = 0x04; goto _do_bit_hl;
+            case 0x58: scratch = 0x08; goto _do_bit_hl;
+            case 0x60: scratch = 0x10; goto _do_bit_hl;
+            case 0x68: scratch = 0x20; goto _do_bit_hl;
+            case 0x70: scratch = 0x40; goto _do_bit_hl;
+            case 0x78: scratch = 0x80; goto _do_bit_hl;
+_do_bit_hl:
+                if(val & (scratch & 0xFF))
+                    regs->af |= FLAG_Z;
+                else
+                    regs->af &= ~FLAG_Z;
+
+                regs->af &= ~FLAG_N;
+                regs->af |= FLAG_H;
+                break;
+            // RES
+            case 0x80: scratch = 0x01; goto _do_res_hl;
+            case 0x88: scratch = 0x02; goto _do_res_hl;
+            case 0x90: scratch = 0x04; goto _do_res_hl;
+            case 0x98: scratch = 0x08; goto _do_res_hl;
+            case 0xA0: scratch = 0x10; goto _do_res_hl;
+            case 0xA8: scratch = 0x20; goto _do_res_hl;
+            case 0xB0: scratch = 0x40; goto _do_res_hl;
+            case 0xB8: scratch = 0x80; goto _do_res_hl;
+ _do_res_hl:
+                memwrite(regs->hl, val & ~(scratch & 0xFF));
+                break;
+            // SET
+            case 0xC0: scratch = 0x01; goto _do_set_hl;
+            case 0xC8: scratch = 0x02; goto _do_set_hl;
+            case 0xD0: scratch = 0x04; goto _do_set_hl;
+            case 0xD8: scratch = 0x08; goto _do_set_hl;
+            case 0xE0: scratch = 0x10; goto _do_set_hl;
+            case 0xE8: scratch = 0x20; goto _do_set_hl;
+            case 0xF0: scratch = 0x40; goto _do_set_hl;
+            case 0xF8: scratch = 0x80; goto _do_set_hl;
+_do_set_hl:
+                memwrite(regs->hl, val | (scratch & 0xFF));
+                break;
+        }
+    } else {
+        switch(opcode & 0xF8) {
+            case 0x00: // RLC
+                regs->af &= ~(FLAG_N | FLAG_H);
+                scratch = *param << 1;
+                if(*param & 0x80) {
+                    regs->af |= FLAG_C;
+                    scratch |= 0x01;
+                } else {
+                    regs->af &= ~FLAG_C;
+                    scratch &= ~0x01;
+                }
+                *param = scratch;
+
+                if(*param == 0)
+                    regs->af |= FLAG_Z;
+                else
+                    regs->af &= ~FLAG_Z;
+                break;
+            case 0x08: // RRC
+                regs->af &= ~(FLAG_N | FLAG_H);
+                scratch = *param >> 1;
+                if(*param & 0x01) {
+                    regs->af |= FLAG_C;
+                    scratch |= 0x80;
+                } else {
+                    regs->af &= ~FLAG_C;
+                    scratch &= ~0x80;
+                }
+                *param = scratch;
+
+                if(*param == 0)
+                    regs->af |= FLAG_Z;
+                else
+                    regs->af &= ~FLAG_Z;
+                break;
+            case 0x10: // RL
+                regs->af &= ~(FLAG_N | FLAG_H);
+                scratch = *param << 1;
+                if(regs->af & FLAG_C)
+                    scratch |= 0x01;
+                else
+                    scratch &= ~0x01;
+                
+                if(*param & 0x80)
+                    regs->af |= FLAG_C;
+                else
+                    regs->af &= ~FLAG_C;
+                
+                *param = scratch;
+
+                if(*param == 0)
+                    regs->af |= FLAG_Z;
+                else
+                    regs->af &= ~FLAG_Z;
+                break;
+            case 0x18: // RR
+                regs->af &= ~(FLAG_N | FLAG_H);
+                scratch = *param >> 1;
+                if(regs->af & FLAG_C)
+                    scratch |= 0x80;
+                else
+                    scratch &= ~0x80;
+                
+                if(*param & 0x01)
+                    regs->af |= FLAG_C;
+                else
+                    regs->af &= ~FLAG_C;
+                
+                *param = scratch;
+
+                if(*param == 0)
+                    regs->af |= FLAG_Z;
+                else
+                    regs->af &= ~FLAG_Z;
+                break;
+            case 0x20: // SLA
+                regs->af &= ~(FLAG_N | FLAG_H);
+                scratch = *param << 1;
+                
+                if(*param & 0x80)
+                    regs->af |= FLAG_C;
+                else
+                    regs->af &= ~FLAG_C;
+                
+                *param = scratch;
+
+                if(*param == 0)
+                    regs->af |= FLAG_Z;
+                else
+                    regs->af &= ~FLAG_Z;
+                break;
+            case 0x28: // SRA
+                regs->af &= ~(FLAG_N | FLAG_H);
+                scratch = *param >> 1 | (*param & 0x80);
+                
+                if(*param & 0x01)
+                    regs->af |= FLAG_C;
+                else
+                    regs->af &= ~FLAG_C;
+                
+                *param = scratch;
+
+                if(*param == 0)
+                    regs->af |= FLAG_Z;
+                else
+                    regs->af &= ~FLAG_Z;
+                break;
+            case 0x30: // SWAP
+                regs->af &= ~(FLAG_N | FLAG_H | FLAG_C);
+                scratch = *param >> 4;
+                *param <<= 4;
+                *param |= scratch & 0x0F;
+
+                if(*param == 0)
+                    regs->af |= FLAG_Z;
+                else
+                    regs->af &= ~FLAG_Z;
+                break;
+            case 0x38: // SRL
+                regs->af &= ~(FLAG_N | FLAG_H);
+                scratch = *param >> 1;
+                
+                if(*param & 0x01)
+                    regs->af |= FLAG_C;
+                else
+                    regs->af &= ~FLAG_C;
+                
+                *param = scratch;
+
+                if(*param == 0)
+                    regs->af |= FLAG_Z;
+                else
+                    regs->af &= ~FLAG_Z;
+                break;
+            // BIT
+            case 0x40: scratch = 0x01; goto _do_bit;
+            case 0x48: scratch = 0x02; goto _do_bit;
+            case 0x50: scratch = 0x04; goto _do_bit;
+            case 0x58: scratch = 0x08; goto _do_bit;
+            case 0x60: scratch = 0x10; goto _do_bit;
+            case 0x68: scratch = 0x20; goto _do_bit;
+            case 0x70: scratch = 0x40; goto _do_bit;
+            case 0x78: scratch = 0x80; goto _do_bit;
 _do_bit:
-            if(*param & (scratch & 0xFF))
-                regs->af |= FLAG_Z;
-            else
-                regs->af &= ~FLAG_Z;
+                if(*param & (scratch & 0xFF))
+                    regs->af |= FLAG_Z;
+                else
+                    regs->af &= ~FLAG_Z;
 
-            regs->af &= ~FLAG_N;
-            regs->af |= FLAG_H;
-            break;
-        // RES
-        case 0x80: scratch = 0x01; goto _do_res;
-        case 0x88: scratch = 0x02; goto _do_res;
-        case 0x90: scratch = 0x04; goto _do_res;
-        case 0x98: scratch = 0x08; goto _do_res;
-        case 0xA0: scratch = 0x10; goto _do_res;
-        case 0xA8: scratch = 0x20; goto _do_res;
-        case 0xB0: scratch = 0x40; goto _do_res;
-        case 0xB8: scratch = 0x80; goto _do_res;
-_do_res:
-            *param &= ~(scratch & 0xFF);
-            break;
-        // SET
-        case 0xC0: scratch = 0x01; goto _do_set;
-        case 0xC8: scratch = 0x02; goto _do_set;
-        case 0xD0: scratch = 0x04; goto _do_set;
-        case 0xD8: scratch = 0x08; goto _do_set;
-        case 0xE0: scratch = 0x10; goto _do_set;
-        case 0xE8: scratch = 0x20; goto _do_set;
-        case 0xF0: scratch = 0x40; goto _do_set;
-        case 0xF8: scratch = 0x80; goto _do_set;
+                regs->af &= ~FLAG_N;
+                regs->af |= FLAG_H;
+                break;
+            // RES
+            case 0x80: scratch = 0x01; goto _do_res;
+            case 0x88: scratch = 0x02; goto _do_res;
+            case 0x90: scratch = 0x04; goto _do_res;
+            case 0x98: scratch = 0x08; goto _do_res;
+            case 0xA0: scratch = 0x10; goto _do_res;
+            case 0xA8: scratch = 0x20; goto _do_res;
+            case 0xB0: scratch = 0x40; goto _do_res;
+            case 0xB8: scratch = 0x80; goto _do_res;
+ _do_res:
+                *param &= ~(scratch & 0xFF);
+                break;
+            // SET
+            case 0xC0: scratch = 0x01; goto _do_set;
+            case 0xC8: scratch = 0x02; goto _do_set;
+            case 0xD0: scratch = 0x04; goto _do_set;
+            case 0xD8: scratch = 0x08; goto _do_set;
+            case 0xE0: scratch = 0x10; goto _do_set;
+            case 0xE8: scratch = 0x20; goto _do_set;
+            case 0xF0: scratch = 0x40; goto _do_set;
+            case 0xF8: scratch = 0x80; goto _do_set;
 _do_set:
-            *param |= scratch & 0xFF;
-            break;
+                *param |= scratch & 0xFF;
+                break;
+        }
     }
 }
 

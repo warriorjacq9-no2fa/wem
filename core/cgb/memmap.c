@@ -212,23 +212,23 @@ uint8_t memread(uint16_t addr) {
                 if(addr < 0x4000)
                     return rom_00[addr];
                 else if(addr < 0x8000)
-                    return rom_nn[addr];
+                    return rom_nn[addr - 0x4000];
                 else if(addr < 0xA000) {
                     if(vram_block) return 0xFF;
-                    else return vram[addr];
+                    else return vram[addr - 0x8000];
                 } else if(addr < 0xC000)
-                    return eram[addr];
+                    return eram[addr - 0xA000];
                 else if(addr < 0xD000)
-                    return wram0[addr];
+                    return wram0[addr - 0xC000];
                 else if(addr < 0xE000)
-                    return wram1[addr];
+                    return wram1[addr - 0xD000];
                 else if(addr < 0xFE00)
                     return memread(addr - 0x2000); // Echo RAM from 0xC000
                 else if(addr < 0xFEA0) {
                     if(oam_block) return 0xFF;
-                    else return oam[addr];
+                    else return oam[addr - 0xFE00];
                 } else if(addr > 0xFF7F && addr < 0xFFFF)
-                    return hram[addr];
+                    return hram[addr - 0xFF80];
             }
             return 0;
     }
@@ -258,18 +258,18 @@ void memwrite(uint16_t addr, uint8_t val) {
         case REG_IE:        reg_ie = val; break;
         default:
             if(addr > 0x7FFF && addr < 0xA000 && !vram_block)
-                vram[addr] = val;
+                vram[addr - 0x8000] = val;
             else if(addr < 0xC000)
-                eram[addr] = val;
+                eram[addr - 0xA000] = val;
             else if(addr < 0xD000)
-                wram0[addr] = val;
+                wram0[addr - 0xC000] = val;
             else if(addr < 0xE000)
-                wram1[addr] = val;
+                wram1[addr - 0xD000] = val;
             else if(addr < 0xFE00)
                 memwrite(addr - 0x2000, val); // Echo RAM from 0xC000
             else if(addr < 0xFEA0 && !vram_block)
-                oam[addr] = val; // TODO: check PPU state
+                oam[addr - 0xFE00] = val; // TODO: check PPU state
             else if(addr > 0xFF7F && addr < 0xFFFF)
-                hram[addr] = val;
+                hram[addr - 0xFF80] = val;
     }
 }

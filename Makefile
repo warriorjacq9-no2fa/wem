@@ -1,12 +1,17 @@
 DEBUG=1
 
 CC = gcc
-CFLAGS = -g -Wall -Werror -O2 -I$(CURDIR)/core/cgb/include -I$(CURDIR)/frontend/pc/include -pthread
+CFLAGS = -g -Wall -Werror -O2 -I$(CURDIR)/core/cgb/include -I$(CURDIR)/frontend/pc/include -I$(CURDIR)/utils/include -pthread
 
 LD = gcc
 LDFLAGS = -g -lSDL3 -pthread
 
-OBJS = main.o
+OBJS = \
+utils/timer.o \
+main.o
+
+HEADERS = \
+utils/include/timer.h
 
 .PHONY: all clean core/cgb/libcore.a frontend/pc/libgraphics.a
 

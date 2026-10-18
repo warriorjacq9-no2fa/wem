@@ -30,7 +30,7 @@ clean:
 	$(CC) $(CFLAGS) -c $< -o $@
 
 core/cgb/libcore.a:
-	$(MAKE) -C core/cgb libcore.a CC=$(CC) CFLAGS=$(CFALGS) DEBUG=$(DEBUG)
+	$(MAKE) -C core/cgb libcore.a CC=$(CC) CFLAGS=$(CFLAGS) DEBUG=$(DEBUG)
 
 frontend/pc/libgraphics.a:
-	$(MAKE) -C frontend/pc libgraphics.a CC=$(CC) CFLAGS=$(CFALGS) DEBUG=$(DEBUG)
+	$(MAKE) -C frontend/pc libgraphics.a CC=$(CC) CFLAGS=$(CFLAGS) DEBUG=$(DEBUG)

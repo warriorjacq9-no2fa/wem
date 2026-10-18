@@ -27,8 +27,8 @@
 
 /* Sprite flag bitmasks */
 #define SF_PRIORITY 0x80 // 0: sprite above background, 1: background colors 1-3 overlay sprite
-#define SF_YFLIP    0x40 // If set, flip sprite verticalreg_ppu_ly
-#define SF_XFLIP    0x20 // If set, flip sprite horizontalreg_ppu_ly
+#define SF_YFLIP    0x40 // If set, flip sprite vertically
+#define SF_XFLIP    0x20 // If set, flip sprite horizontally
 
 static uint16_t dot;
 static uint16_t sprites[10];

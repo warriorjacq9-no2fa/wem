@@ -5,16 +5,26 @@
 #include <stdlib.h>
 #include <core.h>
 #include <graphics.h>
+#include <unistd.h>
 
 uint32_t pixels[160*144];
 
+struct arguments {
+    FILE* file;
+    uint32_t* pixels;
+};
+
 void* emu_thread(void* arg) {
+    // Wait for graphics to initialize
+    // TODO: better way to do this
+    sleep(2);
+    struct arguments* args = (struct arguments*)arg;
     uint8_t *data = malloc(ROM_SZ);
     if(data == NULL) {
         perror("Failed to allocate ROM buffer");
         return NULL;
     }
-    size_t res = fread(data, 1, ROM_SZ, (FILE*)arg);
+    size_t res = fread(data, 1, ROM_SZ, (FILE*)args->file);
     if(res < ROM_SZ) {
         fprintf(stderr, "ROM must be at least %d bytes\n", ROM_SZ);
         return NULL;
@@ -22,7 +32,7 @@ void* emu_thread(void* arg) {
     load_rom(data);
     struct registers regs;
     poweron(&regs);
-    run(&regs);
+    run(&regs, args->pixels);
     return NULL;
 }
 
@@ -40,19 +50,19 @@ int main(int argc, char** argv) {
     }
 
     for(int y = 0; y < 144; y++) {
-        for(int x = 0; x < 160; x++) {
-            uint8_t r = x;
-            uint8_t g = y;
-            uint8_t b = 128;
-
-            pixels[y * 160 + x] = r | (g << 8) | (b << 16) | 0xFF000000;
-        }
+        for(int x = 0; x < 160; x++)
+            pixels[y * 160 + x] = 0xFFFFFFFF;
     }
 
     pthread_t thread;
 
+    struct arguments args = (struct arguments) {
+        .file = fp,
+        .pixels = pixels
+    };
+
     printf("Creating emulation thread...\n");
-    if(pthread_create(&thread, NULL, emu_thread, fp) != 0) {
+    if(pthread_create(&thread, NULL, emu_thread, &args) != 0) {
         perror("Failed to create emulation thread");
         return 1;
     }

@@ -12,4 +12,7 @@ extern uint8_t
 
 extern bool oam_block, vram_block;
 
+void init_ppu();
+void run_ppu(uint32_t* pixels);
+
 #endif

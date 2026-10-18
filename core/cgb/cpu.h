@@ -37,4 +37,6 @@ struct registers {
 #define FLAG_H 0b00100000
 #define FLAG_C 0b00010000
 
+void run_cpu(struct registers* regs);
+
 #endif

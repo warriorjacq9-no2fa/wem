@@ -13,7 +13,6 @@ struct typed_ptr {
         int8_t* s8;
         int16_t* s16;
         void* raw;
-        uint16_t addr;
     };
     enum ptr_type{
         NUL,
@@ -23,6 +22,25 @@ struct typed_ptr {
         S16,
     } type;
 };
+
+void typed_ptr_dbg(char* s, struct typed_ptr p) {
+    switch(p.type) {
+        case U8:
+            snprintf(s, 8,"(%02x)", *p.u8);
+            break;
+        case S8:
+            snprintf(s, 8,"(%s%x)", (*p.s8 < 0) ? "-" : "", (*p.s8 < 0) ? -*p.s8 : *p.s8);
+            break;
+        case U16:
+            snprintf(s, 8,"(%04x)", *p.u16);
+            break;
+        case S16:
+            snprintf(s, 8,"(%s%x)", (*p.s16 < 0) ? "-" : "", (*p.s16 < 0) ? -*p.s16 : *p.s16);
+            break;
+        case NUL:
+            break;
+    }
+}
 
 #if DEBUG
 static const char* const insn_names[] = {
@@ -68,6 +86,7 @@ static const char* const pfx_names[] = {
     "SLA",
     "SRA",
     "SWAP",
+    "SRL",
     "BIT",
     "BIT",
     "BIT",
@@ -270,7 +289,6 @@ void run_insn_pfx(struct registers* regs, uint8_t opcode) {
         case 0x03: param = &regs->e; break;
         case 0x04: param = &regs->h; break;
         case 0x05: param = &regs->l; break;
-        case 0x06: return; // TODO: [HL] param
         case 0x07: param = &regs->a; break;
         default: break;
     }
@@ -288,7 +306,7 @@ void run_insn_pfx(struct registers* regs, uint8_t opcode) {
         default: break;
     }
     fprintf(stderr,
-        "Running prefixed %s (%02x) %s (%02x)\n",
+        "Running prefixed %s(%02x) %s(%02x)\n",
         pfx_names[(opcode & 0xF8) >> 3], opcode, 
         pname, (param != NULL ? *param : 0)
     );
@@ -297,138 +315,138 @@ void run_insn_pfx(struct registers* regs, uint8_t opcode) {
         uint8_t val = memread(regs->hl);
         switch(opcode & 0xF8) {
             case 0x00: // RLC
-                regs->af &= ~(FLAG_N | FLAG_H);
+                regs->f &= ~(FLAG_N | FLAG_H);
                 scratch = val << 1;
                 if(val & 0x80) {
-                    regs->af |= FLAG_C;
+                    regs->f |= FLAG_C;
                     scratch |= 0x01;
                 } else {
-                    regs->af &= ~FLAG_C;
+                    regs->f &= ~FLAG_C;
                     scratch &= ~0x01;
                 }
                 memwrite(regs->hl, scratch);
 
                 if(scratch == 0)
-                    regs->af |= FLAG_Z;
+                    regs->f |= FLAG_Z;
                 else
-                    regs->af &= ~FLAG_Z;
+                    regs->f &= ~FLAG_Z;
                 break;
             case 0x08: // RRC
-                regs->af &= ~(FLAG_N | FLAG_H);
+                regs->f &= ~(FLAG_N | FLAG_H);
                 scratch = val >> 1;
                 if(val & 0x01) {
-                    regs->af |= FLAG_C;
+                    regs->f |= FLAG_C;
                     scratch |= 0x80;
                 } else {
-                    regs->af &= ~FLAG_C;
+                    regs->f &= ~FLAG_C;
                     scratch &= ~0x80;
                 }
                 memwrite(regs->hl, scratch);
 
                 if(scratch == 0)
-                    regs->af |= FLAG_Z;
+                    regs->f |= FLAG_Z;
                 else
-                    regs->af &= ~FLAG_Z;
+                    regs->f &= ~FLAG_Z;
                 break;
             case 0x10: // RL
-                regs->af &= ~(FLAG_N | FLAG_H);
+                regs->f &= ~(FLAG_N | FLAG_H);
                 scratch = val << 1;
-                if(regs->af & FLAG_C)
+                if(regs->f & FLAG_C)
                     scratch |= 0x01;
                 else
                     scratch &= ~0x01;
                 
                 if(val & 0x80)
-                    regs->af |= FLAG_C;
+                    regs->f |= FLAG_C;
                 else
-                    regs->af &= ~FLAG_C;
+                    regs->f &= ~FLAG_C;
                 
                 memwrite(regs->hl, scratch);
 
                 if(scratch == 0)
-                    regs->af |= FLAG_Z;
+                    regs->f |= FLAG_Z;
                 else
-                    regs->af &= ~FLAG_Z;
+                    regs->f &= ~FLAG_Z;
                 break;
             case 0x18: // RR
-                regs->af &= ~(FLAG_N | FLAG_H);
+                regs->f &= ~(FLAG_N | FLAG_H);
                 scratch = val >> 1;
-                if(regs->af & FLAG_C)
+                if(regs->f & FLAG_C)
                     scratch |= 0x80;
                 else
                     scratch &= ~0x80;
                 
                 if(val & 0x01)
-                    regs->af |= FLAG_C;
+                    regs->f |= FLAG_C;
                 else
-                    regs->af &= ~FLAG_C;
+                    regs->f &= ~FLAG_C;
                 
                 memwrite(regs->hl, scratch);
 
                 if(scratch == 0)
-                    regs->af |= FLAG_Z;
+                    regs->f |= FLAG_Z;
                 else
-                    regs->af &= ~FLAG_Z;
+                    regs->f &= ~FLAG_Z;
                 break;
             case 0x20: // SLA
-                regs->af &= ~(FLAG_N | FLAG_H);
+                regs->f &= ~(FLAG_N | FLAG_H);
                 scratch = val << 1;
                 
                 if(val & 0x80)
-                    regs->af |= FLAG_C;
+                    regs->f |= FLAG_C;
                 else
-                    regs->af &= ~FLAG_C;
+                    regs->f &= ~FLAG_C;
                 
                 memwrite(regs->hl, scratch);
 
                 if(scratch == 0)
-                    regs->af |= FLAG_Z;
+                    regs->f |= FLAG_Z;
                 else
-                    regs->af &= ~FLAG_Z;
+                    regs->f &= ~FLAG_Z;
                 break;
             case 0x28: // SRA
-                regs->af &= ~(FLAG_N | FLAG_H);
+                regs->f &= ~(FLAG_N | FLAG_H);
                 scratch = val >> 1 | (*param & 0x80);
                 
                 if(val & 0x01)
-                    regs->af |= FLAG_C;
+                    regs->f |= FLAG_C;
                 else
-                    regs->af &= ~FLAG_C;
+                    regs->f &= ~FLAG_C;
                 
                 memwrite(regs->hl, scratch);
 
                 if(val == 0)
-                    regs->af |= FLAG_Z;
+                    regs->f |= FLAG_Z;
                 else
-                    regs->af &= ~FLAG_Z;
+                    regs->f &= ~FLAG_Z;
                 break;
             case 0x30: // SWAP
-                regs->af &= ~(FLAG_N | FLAG_H | FLAG_C);
+                regs->f &= ~(FLAG_N | FLAG_H | FLAG_C);
                 scratch = val >> 4;
                 scratch |= ( val << 4) & 0xF0;
 
                 memwrite(regs->hl, scratch);
 
                 if(scratch == 0)
-                    regs->af |= FLAG_Z;
+                    regs->f |= FLAG_Z;
                 else
-                    regs->af &= ~FLAG_Z;
+                    regs->f &= ~FLAG_Z;
                 break;
             case 0x38: // SRL
-                regs->af &= ~(FLAG_N | FLAG_H);
+                regs->f &= ~(FLAG_N | FLAG_H);
                 scratch = val >> 1;
                 
                 if(val & 0x01)
-                    regs->af |= FLAG_C;
+                    regs->f |= FLAG_C;
                 else
-                    regs->af &= ~FLAG_C;
+                    regs->f &= ~FLAG_C;
                 
                 memwrite(regs->hl, scratch);
 
                 if(scratch == 0)
-                    regs->af |= FLAG_Z;
+                    regs->f |= FLAG_Z;
                 else
-                    regs->af &= ~FLAG_Z;
+                    regs->f &= ~FLAG_Z;
                 break;
             // BIT
             case 0x40: scratch = 0x01; goto _do_bit_hl;
@@ -440,13 +458,13 @@ void run_insn_pfx(struct registers* regs, uint8_t opcode) {
             case 0x70: scratch = 0x40; goto _do_bit_hl;
             case 0x78: scratch = 0x80; goto _do_bit_hl;
 _do_bit_hl:
-                if(val & (scratch & 0xFF))
-                    regs->af |= FLAG_Z;
+                if((val & (scratch & 0xFF)) == 0)
+                    regs->f |= FLAG_Z;
                 else
-                    regs->af &= ~FLAG_Z;
+                    regs->f &= ~FLAG_Z;
 
-                regs->af &= ~FLAG_N;
-                regs->af |= FLAG_H;
+                regs->f &= ~FLAG_N;
+                regs->f |= FLAG_H;
                 break;
             // RES
             case 0x80: scratch = 0x01; goto _do_res_hl;
@@ -476,137 +494,137 @@ _do_set_hl:
     } else {
         switch(opcode & 0xF8) {
             case 0x00: // RLC
-                regs->af &= ~(FLAG_N | FLAG_H);
+                regs->f &= ~(FLAG_N | FLAG_H);
                 scratch = *param << 1;
                 if(*param & 0x80) {
-                    regs->af |= FLAG_C;
+                    regs->f |= FLAG_C;
                     scratch |= 0x01;
                 } else {
-                    regs->af &= ~FLAG_C;
+                    regs->f &= ~FLAG_C;
                     scratch &= ~0x01;
                 }
-                *param = scratch;
+                *param = (uint8_t)(scratch & 0xFF);
 
                 if(*param == 0)
-                    regs->af |= FLAG_Z;
+                    regs->f |= FLAG_Z;
                 else
-                    regs->af &= ~FLAG_Z;
+                    regs->f &= ~FLAG_Z;
                 break;
             case 0x08: // RRC
-                regs->af &= ~(FLAG_N | FLAG_H);
+                regs->f &= ~(FLAG_N | FLAG_H);
                 scratch = *param >> 1;
                 if(*param & 0x01) {
-                    regs->af |= FLAG_C;
+                    regs->f |= FLAG_C;
                     scratch |= 0x80;
                 } else {
-                    regs->af &= ~FLAG_C;
+                    regs->f &= ~FLAG_C;
                     scratch &= ~0x80;
                 }
-                *param = scratch;
+                *param = (uint8_t)(scratch & 0xFF);
 
                 if(*param == 0)
-                    regs->af |= FLAG_Z;
+                    regs->f |= FLAG_Z;
                 else
-                    regs->af &= ~FLAG_Z;
+                    regs->f &= ~FLAG_Z;
                 break;
             case 0x10: // RL
-                regs->af &= ~(FLAG_N | FLAG_H);
+                regs->f &= ~(FLAG_N | FLAG_H);
                 scratch = *param << 1;
-                if(regs->af & FLAG_C)
+                if(regs->f & FLAG_C)
                     scratch |= 0x01;
                 else
                     scratch &= ~0x01;
                 
                 if(*param & 0x80)
-                    regs->af |= FLAG_C;
+                    regs->f |= FLAG_C;
                 else
-                    regs->af &= ~FLAG_C;
+                    regs->f &= ~FLAG_C;
                 
-                *param = scratch;
+                *param = (uint8_t)(scratch & 0xFF);
 
                 if(*param == 0)
-                    regs->af |= FLAG_Z;
+                    regs->f |= FLAG_Z;
                 else
-                    regs->af &= ~FLAG_Z;
+                    regs->f &= ~FLAG_Z;
                 break;
             case 0x18: // RR
-                regs->af &= ~(FLAG_N | FLAG_H);
+                regs->f &= ~(FLAG_N | FLAG_H);
                 scratch = *param >> 1;
-                if(regs->af & FLAG_C)
+                if(regs->f & FLAG_C)
                     scratch |= 0x80;
                 else
                     scratch &= ~0x80;
                 
                 if(*param & 0x01)
-                    regs->af |= FLAG_C;
+                    regs->f |= FLAG_C;
                 else
-                    regs->af &= ~FLAG_C;
+                    regs->f &= ~FLAG_C;
                 
-                *param = scratch;
+                *param = (uint8_t)(scratch & 0xFF);
 
                 if(*param == 0)
-                    regs->af |= FLAG_Z;
+                    regs->f |= FLAG_Z;
                 else
-                    regs->af &= ~FLAG_Z;
+                    regs->f &= ~FLAG_Z;
                 break;
             case 0x20: // SLA
-                regs->af &= ~(FLAG_N | FLAG_H);
+                regs->f &= ~(FLAG_N | FLAG_H);
                 scratch = *param << 1;
                 
                 if(*param & 0x80)
-                    regs->af |= FLAG_C;
+                    regs->f |= FLAG_C;
                 else
-                    regs->af &= ~FLAG_C;
+                    regs->f &= ~FLAG_C;
                 
-                *param = scratch;
+                *param = (uint8_t)(scratch & 0xFF);
 
                 if(*param == 0)
-                    regs->af |= FLAG_Z;
+                    regs->f |= FLAG_Z;
                 else
-                    regs->af &= ~FLAG_Z;
+                    regs->f &= ~FLAG_Z;
                 break;
             case 0x28: // SRA
-                regs->af &= ~(FLAG_N | FLAG_H);
+                regs->f &= ~(FLAG_N | FLAG_H);
                 scratch = *param >> 1 | (*param & 0x80);
                 
                 if(*param & 0x01)
-                    regs->af |= FLAG_C;
+                    regs->f |= FLAG_C;
                 else
-                    regs->af &= ~FLAG_C;
+                    regs->f &= ~FLAG_C;
                 
-                *param = scratch;
+                *param = (uint8_t)(scratch & 0xFF);
 
                 if(*param == 0)
-                    regs->af |= FLAG_Z;
+                    regs->f |= FLAG_Z;
                 else
-                    regs->af &= ~FLAG_Z;
+                    regs->f &= ~FLAG_Z;
                 break;
             case 0x30: // SWAP
-                regs->af &= ~(FLAG_N | FLAG_H | FLAG_C);
+                regs->f &= ~(FLAG_N | FLAG_H | FLAG_C);
                 scratch = *param >> 4;
                 *param <<= 4;
                 *param |= scratch & 0x0F;
 
                 if(*param == 0)
-                    regs->af |= FLAG_Z;
+                    regs->f |= FLAG_Z;
                 else
-                    regs->af &= ~FLAG_Z;
+                    regs->f &= ~FLAG_Z;
                 break;
             case 0x38: // SRL
-                regs->af &= ~(FLAG_N | FLAG_H);
+                regs->f &= ~(FLAG_N | FLAG_H);
                 scratch = *param >> 1;
                 
                 if(*param & 0x01)
-                    regs->af |= FLAG_C;
+                    regs->f |= FLAG_C;
                 else
-                    regs->af &= ~FLAG_C;
+                    regs->f &= ~FLAG_C;
                 
-                *param = scratch;
+                *param = (uint8_t)(scratch & 0xFF);
 
                 if(*param == 0)
-                    regs->af |= FLAG_Z;
+                    regs->f |= FLAG_Z;
                 else
-                    regs->af &= ~FLAG_Z;
+                    regs->f &= ~FLAG_Z;
                 break;
             // BIT
             case 0x40: scratch = 0x01; goto _do_bit;
@@ -618,13 +636,13 @@ _do_set_hl:
             case 0x70: scratch = 0x40; goto _do_bit;
             case 0x78: scratch = 0x80; goto _do_bit;
 _do_bit:
-                if(*param & (scratch & 0xFF))
-                    regs->af |= FLAG_Z;
+                if((*param & (scratch & 0xFF)) == 0)
+                    regs->f |= FLAG_Z;
                 else
-                    regs->af &= ~FLAG_Z;
+                    regs->f &= ~FLAG_Z;
 
-                regs->af &= ~FLAG_N;
-                regs->af |= FLAG_H;
+                regs->f &= ~FLAG_N;
+                regs->f |= FLAG_H;
                 break;
             // RES
             case 0x80: scratch = 0x01; goto _do_res;
@@ -652,6 +670,16 @@ _do_set:
                 break;
         }
     }
+    printf(
+        "bc: %04x de: %04x hl: %04x af: %04x sp: %04x pc: %04x ime: %d state: %d prefix: %d\r",
+        regs->bc, regs->de, regs->hl, regs->af, regs->sp, regs->pc, regs->ime, regs->state, pfx
+    );
+#if DEBUG
+    fprintf(stderr,
+        "bc: %04x de: %04x hl: %04x af: %04x sp: %04x pc: %04x ime: %d state: %d prefix: %d\n",
+        regs->bc, regs->de, regs->hl, regs->af, regs->sp, regs->pc, regs->ime, regs->state, pfx
+    );
+#endif
 }
 
 void run_insn(struct registers* regs) {
@@ -673,10 +701,14 @@ void run_insn(struct registers* regs) {
     }
     int scratch;
 #if DEBUG
+    char p1_str[8] = {0}, p2_str[8] = {0};
+    typed_ptr_dbg(p1_str, p1);
+    typed_ptr_dbg(p2_str, p2);
     fprintf(stderr,
-        "Running %s (%02x) %s (%04x), %s (%04x)\n",
-        insn_names[i.op], opcode, 
-        param_names[i.p1], p1.raw != NULL ? *p1.u16 : 0, param_names[i.p2], p2.raw != NULL ? *p2.u16 : 0
+        "Running %s(%02x) %s%s, %s%s\n",
+        insn_names[(i.op < sizeof(insn_names) / sizeof(insn_names[0])) ? i.op : 0], opcode, 
+        param_names[(i.p1 < sizeof(insn_names) / sizeof(insn_names[0])) ? i.p1 : 0], p1_str,
+        param_names[(i.p2 < sizeof(insn_names) / sizeof(insn_names[0])) ? i.p2 : 0], p2_str
     );
 #endif
     switch(i.op) {
@@ -700,14 +732,14 @@ void run_insn(struct registers* regs) {
             switch(p1.type){
                 case U8:
                 case S8:
-                    regs->af &= ~FLAG_N;
-                    if(*p1.u8 == 0xF) regs->af |= FLAG_H;
-                    else regs->af &= ~FLAG_H;
+                    regs->f &= ~FLAG_N;
+                    if(*p1.u8 == 0xF) regs->f |= FLAG_H;
+                    else regs->f &= ~FLAG_H;
 
                     (*p1.u8)++;
 
-                    if(*p1.u8 == 0) regs->af |= FLAG_Z;
-                    else regs->af &= ~FLAG_Z;
+                    if(*p1.u8 == 0) regs->f |= FLAG_Z;
+                    else regs->f &= ~FLAG_Z;
 
                     break;
                 case U16:
@@ -722,14 +754,14 @@ void run_insn(struct registers* regs) {
             switch(p1.type){
                 case U8:
                 case S8:
-                    regs->af |= FLAG_N;
-                    if(*p1.u8 == 0) regs->af |= FLAG_H;
-                    else regs->af &= ~FLAG_H;
+                    regs->f |= FLAG_N;
+                    if(*p1.u8 == 0) regs->f |= FLAG_H;
+                    else regs->f &= ~FLAG_H;
 
                     (*p1.u8)--;
 
-                    if(*p1.u8 == 0) regs->af |= FLAG_Z;
-                    else regs->af &= ~FLAG_Z;
+                    if(*p1.u8 == 0) regs->f |= FLAG_Z;
+                    else regs->f &= ~FLAG_Z;
 
                     break;
                 case U16:
@@ -742,52 +774,52 @@ void run_insn(struct registers* regs) {
             break;
         case ADC:
         case ADD:
-            regs->af &= ~FLAG_N;
+            regs->f &= ~FLAG_N;
 
             if(i.op == ADC) {
                 if((*p1.u8 & 0xF) + (*p2.u8 & 0xF) +
-                    (regs->af & FLAG_C) ? 1 : 0 > 0xF)
-                    regs->af |= FLAG_H;
+                    (regs->f & FLAG_C) ? 1 : 0 > 0xF)
+                    regs->f |= FLAG_H;
                 else
-                    regs->af &= ~FLAG_H;
+                    regs->f &= ~FLAG_H;
             } else {
                 if((*p1.u8 & 0xF) + (*p2.u8 & 0xF) > 0xF)
-                    regs->af |= FLAG_H;
+                    regs->f |= FLAG_H;
                 else
-                    regs->af &= ~FLAG_H;
+                    regs->f &= ~FLAG_H;
             }
             switch(p1.type) {
                 case U8:
                     if(i.op == ADC)
                         scratch = *p1.u8 + *p2.u8 + 
-                            (regs->af & FLAG_C) ? 1 : 0;
+                            (regs->f & FLAG_C) ? 1 : 0;
                     else
                         scratch = *p1.u8 + *p2.u8;
 
                     if(scratch > 0xFF)
-                        regs->af |= FLAG_C;
+                        regs->f |= FLAG_C;
                     else
-                        regs->af &= ~FLAG_C;
+                        regs->f &= ~FLAG_C;
 
                     if(scratch == 0)
-                        regs->af |= FLAG_Z;
+                        regs->f |= FLAG_Z;
                     else
-                        regs->af &= ~FLAG_Z;
+                        regs->f &= ~FLAG_Z;
 
                     *p1.u8 = (uint8_t)scratch;
                     break;
                 case U16:
                     if(p2.type == S8) {
                         scratch = *p1.u16 + *p2.s8;
-                        regs->af &= ~FLAG_Z;
+                        regs->f &= ~FLAG_Z;
                     } else {
                         scratch = *p1.u16 + *p2.u16;
                     }
 
                     if(scratch > 0xFFFF)
-                        regs->af |= FLAG_C;
+                        regs->f |= FLAG_C;
                     else
-                        regs->af &= ~FLAG_C;
+                        regs->f &= ~FLAG_C;
 
                     *p1.u16 = (uint16_t)scratch;
                     break;
@@ -797,185 +829,185 @@ void run_insn(struct registers* regs) {
             break;
         case SBC:
         case SUB:
-            regs->af |= FLAG_N;
+            regs->f |= FLAG_N;
 
             if(i.op == SBC) {
                 if((*p1.u8 & 0xF) < (*p2.u8 & 0xF) +
-                    (regs->af & FLAG_C) ? 1 : 0 > 0xF)
-                    regs->af |= FLAG_H;
+                    (regs->f & FLAG_C) ? 1 : 0 > 0xF)
+                    regs->f |= FLAG_H;
                 else
-                    regs->af &= ~FLAG_H;
+                    regs->f &= ~FLAG_H;
             } else {
                 if((*p1.u8 & 0xF) < (*p2.u8 & 0xF))
-                    regs->af |= FLAG_H;
+                    regs->f |= FLAG_H;
                 else
-                    regs->af &= ~FLAG_H;
+                    regs->f &= ~FLAG_H;
             }
             if(i.op == SBC)
                 scratch = *p1.u8 - (*p2.u8 + 
-                    (regs->af & FLAG_C) ? 1 : 0);
+                    (regs->f & FLAG_C) ? 1 : 0);
             else
                 scratch = *p1.u8 - *p2.u8;
 
             if(scratch < 0)
-                regs->af |= FLAG_C;
+                regs->f |= FLAG_C;
             else
-                regs->af &= ~FLAG_C;
+                regs->f &= ~FLAG_C;
 
             if(scratch == 0)
-                regs->af |= FLAG_Z;
+                regs->f |= FLAG_Z;
             else
-                regs->af &= ~FLAG_Z;
+                regs->f &= ~FLAG_Z;
 
             *p1.u8 = (uint8_t)scratch;
             break;
         case AND:
-            regs->af |= FLAG_H;
-            regs->af &= ~(FLAG_N | FLAG_C);
+            regs->f |= FLAG_H;
+            regs->f &= ~(FLAG_N | FLAG_C);
 
             *p1.u8 &= *p2.u8;
 
             if(*p1.u8 == 0)
-                regs->af |= FLAG_Z;
+                regs->f |= FLAG_Z;
             else
-                regs->af &= ~FLAG_Z;
+                regs->f &= ~FLAG_Z;
             break;
         case OR:
-            regs->af &= ~(FLAG_N | FLAG_H | FLAG_C);
+            regs->f &= ~(FLAG_N | FLAG_H | FLAG_C);
 
             *p1.u8 |= *p2.u8;
 
             if(*p1.u8 == 0)
-                regs->af |= FLAG_Z;
+                regs->f |= FLAG_Z;
             else
-                regs->af &= ~FLAG_Z;
+                regs->f &= ~FLAG_Z;
             break;
         case XOR:
-            regs->af &= ~(FLAG_N | FLAG_H | FLAG_C);
+            regs->f &= ~(FLAG_N | FLAG_H | FLAG_C);
 
             *p1.u8 ^= *p2.u8;
 
             if(*p1.u8 == 0)
-                regs->af |= FLAG_Z;
+                regs->f |= FLAG_Z;
             else
-                regs->af &= ~FLAG_Z;
+                regs->f &= ~FLAG_Z;
             break;
         case CP:
-            regs->af |= FLAG_N;
+            regs->f |= FLAG_N;
 
             if((*p1.u8 & 0xF) < (*p2.u8 & 0xF))
-                regs->af |= FLAG_H;
+                regs->f |= FLAG_H;
             else
-                regs->af &= ~FLAG_H;
+                regs->f &= ~FLAG_H;
 
             scratch = *p1.u8 - *p2.u8;
 
             if(scratch < 0)
-                regs->af |= FLAG_C;
+                regs->f |= FLAG_C;
             else
-                regs->af &= ~FLAG_C;
+                regs->f &= ~FLAG_C;
 
             if(scratch == 0)
-                regs->af |= FLAG_Z;
+                regs->f |= FLAG_Z;
             else
-                regs->af &= ~FLAG_Z;
+                regs->f &= ~FLAG_Z;
 
             break;
         case RLCA:
-            regs->af &= ~(FLAG_Z | FLAG_N | FLAG_H);
-            scratch = regs->af << 1;
-            if(regs->af & 0x8000) {
-                regs->af |= FLAG_C;
+            regs->f &= ~(FLAG_Z | FLAG_N | FLAG_H);
+            scratch = regs->f << 1;
+            if(regs->f & 0x8000) {
+                regs->f |= FLAG_C;
                 scratch |= 0x0100;
             } else {
-                regs->af &= ~FLAG_C;
+                regs->f &= ~FLAG_C;
                 scratch &= ~0x0100;
             }
 
-            regs->af &= 0x00FF;
-            regs->af |= (scratch << 8) & 0xFF00;
+            regs->f &= 0x00FF;
+            regs->f |= (scratch << 8) & 0xFF00;
             break;
         case RRCA:
-            regs->af &= ~(FLAG_Z | FLAG_N | FLAG_H);
-            scratch = regs->af >> 1;
-            if(regs->af & 0x0100) {
-                regs->af |= FLAG_C;
+            regs->f &= ~(FLAG_Z | FLAG_N | FLAG_H);
+            scratch = regs->f >> 1;
+            if(regs->f & 0x0100) {
+                regs->f |= FLAG_C;
                 scratch |= 0x8000;
             } else {
-                regs->af &= ~FLAG_C;
+                regs->f &= ~FLAG_C;
                 scratch &= ~0x8000;
             }
 
-            regs->af &= 0x00FF;
-            regs->af |= (scratch << 8) & 0xFF00;
+            regs->f &= 0x00FF;
+            regs->f |= (scratch << 8) & 0xFF00;
             break;
         case RLA:
-            regs->af &= ~(FLAG_Z | FLAG_N | FLAG_H);
-            scratch = regs->af << 1;
-            if(regs->af & 0x8000)
-                regs->af |= FLAG_C;
+            regs->f &= ~(FLAG_Z | FLAG_N | FLAG_H);
+            scratch = regs->f << 1;
+            if(regs->f & 0x8000)
+                regs->f |= FLAG_C;
             else
-                regs->af &= ~FLAG_C;
+                regs->f &= ~FLAG_C;
 
-            regs->af &= 0x00FF;
-            regs->af |= (scratch << 8) & 0xFF00;
+            regs->f &= 0x00FF;
+            regs->f |= (scratch << 8) & 0xFF00;
             break;
         case RRA:
-            regs->af &= ~(FLAG_Z | FLAG_N | FLAG_H);
-            if(regs->af & 0x0100)
-                regs->af |= FLAG_C;
+            regs->f &= ~(FLAG_Z | FLAG_N | FLAG_H);
+            if(regs->f & 0x0100)
+                regs->f |= FLAG_C;
             else
-                regs->af &= ~FLAG_C;
+                regs->f &= ~FLAG_C;
 
-            scratch = regs->af >> 1;
-            regs->af &= 0x00FF;
-            regs->af |= (scratch << 8) & 0xFF00;
+            scratch = regs->f >> 1;
+            regs->f &= 0x00FF;
+            regs->f |= (scratch << 8) & 0xFF00;
             break;
         case DAA:
-            scratch = regs->af >> 8;
-            if((scratch & 0x0F) > 0x09 || regs->af & FLAG_H)
+            scratch = regs->f >> 8;
+            if((scratch & 0x0F) > 0x09 || regs->f & FLAG_H)
                 scratch += 0x06;
 
-            if((scratch & 0xF0) > 0x90 || regs->af & FLAG_C)
+            if((scratch & 0xF0) > 0x90 || regs->f & FLAG_C)
                 scratch += 0x60;
 
-            regs->af &= 0x00FF;
-            regs->af |= scratch << 8;
+            regs->f &= 0x00FF;
+            regs->f |= scratch << 8;
             break;
         case CPL:
-            scratch = regs->af >> 8;
+            scratch = regs->f >> 8;
             scratch = ~scratch;
-            regs->af &= 0x00FF;
-            regs->af |= scratch << 8;
+            regs->f &= 0x00FF;
+            regs->f |= scratch << 8;
 
-            regs->af |= FLAG_N | FLAG_H;
+            regs->f |= FLAG_N | FLAG_H;
             break;
         case SCF:
-            regs->af |= FLAG_C;
-            regs->af &= ~(FLAG_N | FLAG_H);
+            regs->f |= FLAG_C;
+            regs->f &= ~(FLAG_N | FLAG_H);
             break;
         case CCF:
-            if(regs->af & FLAG_C)
-                regs->af &= ~FLAG_C;
+            if(regs->f & FLAG_C)
+                regs->f &= ~FLAG_C;
             else
-                regs->af |= FLAG_C;
+                regs->f |= FLAG_C;
             break;
         case JR:
             switch(i.p1) {
                 case F_NZ:
-                    if(!(regs->af & FLAG_Z))
+                    if(!(regs->f & FLAG_Z))
                         regs->pc += *p2.s8;
                     break;
                 case F_NC:
-                    if(!(regs->af & FLAG_C))
+                    if(!(regs->f & FLAG_C))
                         regs->pc += *p2.s8;
                     break;
                 case F_Z:
-                    if(regs->af & FLAG_Z)
+                    if(regs->f & FLAG_Z)
                         regs->pc += *p2.s8;
                     break;
                 case F_C:
-                    if(regs->af & FLAG_C)
+                    if(regs->f & FLAG_C)
                         regs->pc += *p2.s8;
                     break;
                 default:
@@ -986,19 +1018,19 @@ void run_insn(struct registers* regs) {
         case JP:
             switch(i.p1) {
                 case F_NZ:
-                    if(!(regs->af & FLAG_Z))
+                    if(!(regs->f & FLAG_Z))
                         regs->pc = *p2.u16;
                     break;
                 case F_NC:
-                    if(!(regs->af & FLAG_C))
+                    if(!(regs->f & FLAG_C))
                         regs->pc = *p2.u16;
                     break;
                 case F_Z:
-                    if(regs->af & FLAG_Z)
+                    if(regs->f & FLAG_Z)
                         regs->pc = *p2.u16;
                     break;
                 case F_C:
-                    if(regs->af & FLAG_C)
+                    if(regs->f & FLAG_C)
                         regs->pc = *p2.u16;
                     break;
                 default:
@@ -1009,19 +1041,19 @@ void run_insn(struct registers* regs) {
         case CALL:
             switch(i.p1) {
                 case F_NZ:
-                    if(!(regs->af & FLAG_Z))
+                    if(!(regs->f & FLAG_Z))
                         goto _do_call;
                     break;
                 case F_NC:
-                    if(!(regs->af & FLAG_C))
+                    if(!(regs->f & FLAG_C))
                         goto _do_call;
                     break;
                 case F_Z:
-                    if(regs->af & FLAG_Z)
+                    if(regs->f & FLAG_Z)
                         goto _do_call;
                     break;
                 case F_C:
-                    if(regs->af & FLAG_C)
+                    if(regs->f & FLAG_C)
                         goto _do_call;
                     break;
                 default:
@@ -1041,19 +1073,19 @@ _do_call:
         case RET:
             switch(i.p1) {
                 case F_NZ:
-                    if(!(regs->af & FLAG_Z))
+                    if(!(regs->f & FLAG_Z))
                         goto _do_ret;
                     break;
                 case F_NC:
-                    if(!(regs->af & FLAG_C))
+                    if(!(regs->f & FLAG_C))
                         goto _do_ret;
                     break;
                 case F_Z:
-                    if(regs->af & FLAG_Z)
+                    if(regs->f & FLAG_Z)
                         goto _do_ret;
                     break;
                 case F_C:
-                    if(regs->af & FLAG_C)
+                    if(regs->f & FLAG_C)
                         goto _do_ret;
                     break;
                 default:
@@ -1103,21 +1135,49 @@ _do_ret:
         default:
             break;
     }
-    if(i.op != NOP) {
-        printf(
-            "bc: %04x de: %04x hl: %04x af: %04x sp: %04x pc: %04x ime: %d state: %d prefix: %d\r",
-            regs->bc, regs->de, regs->hl, regs->af, regs->sp, regs->pc, regs->ime, regs->state, pfx
-        );
+    printf(
+        "bc: %04x de: %04x hl: %04x af: %04x sp: %04x pc: %04x ime: %d state: %d prefix: %d\r",
+        regs->bc, regs->de, regs->hl, regs->af, regs->sp, regs->pc, regs->ime, regs->state, pfx
+    );
 #if DEBUG
-        fprintf(stderr,
-            "bc: %04x de: %04x hl: %04x af: %04x sp: %04x pc: %04x ime: %d state: %d prefix: %d\n",
-            regs->bc, regs->de, regs->hl, regs->af, regs->sp, regs->pc, regs->ime, regs->state, pfx
-        );
+    fprintf(stderr,
+        "bc: %04x de: %04x hl: %04x af: %04x sp: %04x pc: %04x ime: %d state: %d prefix: %d\n",
+        regs->bc, regs->de, regs->hl, regs->af, regs->sp, regs->pc, regs->ime, regs->state, pfx
+    );
 #endif
+}
+
+enum int_status {
+    INT_NONE,
+    INT_PENDING,
+    INT_TRIGGERED
+};
+
+enum int_status run_int(struct registers* regs) {
+    uint8_t in = memread(REG_IE) & memread(REG_IF);
+    if(in) {
+        if(regs->ime) {
+            uint8_t bit = in & -in;
+            uint8_t handler = 0x40 + (bit << 3);
+
+            regs->ime = false;
+            memwrite(REG_IF, memread(REG_IF) & ~bit);
+
+            regs->sp -= 2;
+            memwrite(regs->sp, regs->pc & 0xFF);
+            memwrite(regs->sp + 1, regs->pc >> 8);
+            regs->pc = handler;
+
+            return INT_TRIGGERED;
+        } else {
+            return INT_PENDING;
+        }
     }
+    return INT_NONE;
 }
 
 void run_cpu(struct registers* regs) {
+    enum int_status in = run_int(regs);
     switch(regs->state) {
         case S_RUN:
             run_insn(regs);
@@ -1126,7 +1186,11 @@ void run_cpu(struct registers* regs) {
             // TODO: wait for joypad button
             break;
         case S_HALT:
-            // TODO: wait for interrupt
+            if(in == INT_TRIGGERED) {
+                regs->state = S_RUN;
+            } else if(in == INT_PENDING) {
+                regs->state = S_RUN; // TODO: HALT bug
+            }
             break;
     }
 }

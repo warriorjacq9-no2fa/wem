@@ -18,6 +18,12 @@
 #define LCDC_SPREN      0x02 // Enable sprites
 #define LCDC_BGEN       0x01 // Enable background and window
 
+/* Stat register flags */
+#define STAT_INT_LYC    0x40
+#define STAT_INT_OAM    0x20
+#define STAT_INT_VBLANK 0x10
+#define STAT_INT_HBLANK 0x08
+#define STAT_LYC        0x04
 
 /* Sprite flag bitmasks */
 #define SF_PRIORITY 0x80 // 0: sprite above background, 1: background colors 1-3 overlay sprite
@@ -45,7 +51,6 @@ enum ppu_bgfetch {
 } bgfetch_state;
 
 void init_ppu() {
-    reg_ppu_bgp = 0b11100100;
 }
 
 uint16_t get_tile(uint8_t tile) {
@@ -78,6 +83,11 @@ void run_ppu(uint32_t* pixels) {
         reg_ppu_stat |= S_HBLANK;
         reg_ppu_ly = 0;
         dot = 0;
+#if DEBUG
+    fprintf(stderr, "PPU disabled, dot: %d line: %d state: %d fifo: %04x\n",
+        dot, reg_ppu_ly, reg_ppu_stat & 0x03, bg_fifo
+    );
+#endif
         return;
     }
     switch(reg_ppu_stat & 0x03) {
@@ -145,6 +155,8 @@ void run_ppu(uint32_t* pixels) {
                     if(xpos == 160) {
                         reg_ppu_stat &= ~0x03;
                         reg_ppu_stat |= S_HBLANK;
+                        if(reg_ppu_stat & STAT_INT_HBLANK)
+                            memwrite(REG_IF, memread(REG_IF) | 0x02);
                     }
                     break;
             }
@@ -156,13 +168,17 @@ void run_ppu(uint32_t* pixels) {
                 dot = 0;
                 reg_ppu_ly++;
                 if(reg_ppu_ly == 144) {
-                    // TODO: VBLANK IRQ
+                    memwrite(REG_IF, memread(REG_IF) | 0x01);
                     wline = 0;
                     reg_ppu_stat &= ~0x03;
                     reg_ppu_stat |= S_VBLANK;
+                    if(reg_ppu_stat & STAT_INT_VBLANK)
+                        memwrite(REG_IF, memread(REG_IF) | 0x02);
                 } else {
                     reg_ppu_stat &= ~0x03;
                     reg_ppu_stat |= S_OAM;
+                    if(reg_ppu_stat & STAT_INT_OAM)
+                        memwrite(REG_IF, memread(REG_IF) | 0x02);
                 }
             }
             break;
@@ -175,9 +191,19 @@ void run_ppu(uint32_t* pixels) {
                     idx = 0;
                     reg_ppu_stat &= ~0x03;
                     reg_ppu_stat |= S_OAM;
+                    if(reg_ppu_stat & STAT_INT_OAM)
+                        memwrite(REG_IF, memread(REG_IF) | 0x02);
                 }
             }
             break;
+    }
+    if(reg_ppu_ly == reg_ppu_lyc) {
+        reg_ppu_stat |= STAT_LYC;
+        if(reg_ppu_stat & STAT_INT_LYC) {
+            memwrite(REG_IF, memread(REG_IF) | 0x02);
+        }
+    } else {
+        reg_ppu_stat &= ~STAT_LYC;
     }
     dot++;
     // Push FIFO to LCD
@@ -188,8 +214,8 @@ void run_ppu(uint32_t* pixels) {
         pixels[reg_ppu_ly * 144 + x] = 0 | pix | pix << 8 | pix << 16;
     }
 #if DEBUG
-    fprintf(stderr, "PPU dot: %d line: %d state: %d fifo: %04x\n",
-        dot, reg_ppu_ly, reg_ppu_stat & 0x03, bg_fifo
+    fprintf(stderr, "PPU dot: %d line: %d stat: %02x fifo: %04x\n",
+        dot, reg_ppu_ly, reg_ppu_stat, bg_fifo
     );
 #endif
 }

@@ -4,13 +4,16 @@ CFLAGS = -g -Wall -Werror -O2 -DDEBUG=$(DEBUG)
 CORE_OBJS = \
 cpu.o \
 instructions.o \
-memmap.o
+memmap.o \
+ppu.o \
+core.o
 
 CORE_HEADERS = \
 include/core.h \
 cpu.h \
 instructions.h \
-memmap.h
+memmap.h \
+ppu.h
 
 .PHONY: clean
 

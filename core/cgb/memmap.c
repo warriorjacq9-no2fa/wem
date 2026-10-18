@@ -206,30 +206,31 @@ uint8_t memread(uint16_t addr) {
         case REG_BANK:      return reg_bank;
         case REG_IE:        return reg_ie;
         default:
-            if((reg_bank & 0x01) && (addr < 0x0100 || (addr > 0x01FF && addr < 0x0900))) {
-                return cgb_boot[addr];
-            } else {
-                if(addr < 0x4000)
+            if(addr < 0x4000) {
+                if(!(reg_bank & 0x01) && (addr < 0x0100)) {
+                    return dmg_boot[addr];
+                } else {
                     return rom_00[addr];
-                else if(addr < 0x8000)
-                    return rom_nn[addr - 0x4000];
-                else if(addr < 0xA000) {
-                    if(vram_block) return 0xFF;
-                    else return vram[addr - 0x8000];
-                } else if(addr < 0xC000)
-                    return eram[addr - 0xA000];
-                else if(addr < 0xD000)
-                    return wram0[addr - 0xC000];
-                else if(addr < 0xE000)
-                    return wram1[addr - 0xD000];
-                else if(addr < 0xFE00)
-                    return memread(addr - 0x2000); // Echo RAM from 0xC000
-                else if(addr < 0xFEA0) {
-                    if(oam_block) return 0xFF;
-                    else return oam[addr - 0xFE00];
-                } else if(addr > 0xFF7F && addr < 0xFFFF)
-                    return hram[addr - 0xFF80];
-            }
+                }
+            } else if(addr < 0x8000)
+                return rom_nn[addr - 0x4000];
+            else if(addr < 0xA000) {
+                if(vram_block) return 0xFF;
+                else return vram[addr - 0x8000];
+            } else if(addr < 0xC000)
+                return eram[addr - 0xA000];
+            else if(addr < 0xD000)
+                return wram0[addr - 0xC000];
+            else if(addr < 0xE000)
+                return wram1[addr - 0xD000];
+            else if(addr < 0xFE00)
+                return memread(addr - 0x2000); // Echo RAM from 0xC000
+            else if(addr < 0xFEA0) {
+                if(oam_block) return 0xFF;
+                else return oam[addr - 0xFE00];
+            } else if(addr > 0xFF7F && addr < 0xFFFF)
+                return hram[addr - 0xFF80];
+
             return 0;
     }
 }

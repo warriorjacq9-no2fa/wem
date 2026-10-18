@@ -187,7 +187,7 @@ void run_ppu(uint32_t* pixels) {
         uint8_t x = xpos * 8 + dot % 8;
         pixels[reg_ppu_ly * 144 + x] = 0 | pix | pix << 8 | pix << 16;
     }
-#ifdef DEBUG
+#if DEBUG
     fprintf(stderr, "PPU dot: %d line: %d state: %d fifo: %04x\n",
         dot, reg_ppu_ly, reg_ppu_stat & 0x03, bg_fifo
     );

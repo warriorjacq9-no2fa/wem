@@ -1,7 +1,8 @@
-DEBUG=1
-
 CC = gcc
-CFLAGS = -g -Wall -Werror -O2 -I$(CURDIR)/core/cgb/include -I$(CURDIR)/frontend/pc/include -I$(CURDIR)/utils/include -pthread
+CFLAGS = -g -Wall -Werror -O2 \
+-DDEBUG=$(DEBUG) \
+-I$(CURDIR)/core/cgb/include -I$(CURDIR)/frontend/pc/include -I$(CURDIR)/utils/include \
+-pthread
 
 LD = gcc
 LDFLAGS = -g -lSDL3 -pthread

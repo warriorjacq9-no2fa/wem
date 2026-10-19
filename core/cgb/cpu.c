@@ -1216,7 +1216,7 @@ enum int_status run_int(struct registers* regs) {
     if(in) {
         if(regs->ime) {
             uint8_t bit = in & -in;
-            uint8_t handler = 0x40 + (bit << 3);
+            uint8_t handler = 0x40 + ((bit - 1) << 3);
 
             regs->ime = false;
             memwrite(REG_IF, memread(REG_IF) & ~bit);

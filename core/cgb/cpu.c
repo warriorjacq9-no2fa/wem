@@ -1011,7 +1011,7 @@ void run_insn(struct registers* regs) {
                         regs->pc += *p2.s8;
                     break;
                 default:
-                    regs->pc = *p1.u16;
+                    regs->pc += *p1.s8;
                     break;
             }
             break;

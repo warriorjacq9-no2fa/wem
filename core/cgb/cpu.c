@@ -324,9 +324,10 @@ void run_insn_pfx(struct registers* regs, uint8_t opcode) {
         default: break;
     }
     fprintf(stderr,
-        "Running prefixed %s(%02x) %s(%02x)\n",
+        "%s(%02x) %s(%02x) ; %04x\n",
         pfx_names[(opcode & 0xF8) >> 3], opcode, 
-        pname, (param != NULL ? *param : 0)
+        pname, (param != NULL ? *param : 0),
+        regs->pc - 1
     );
 #endif
     if((opcode & 0x07) == 0x06) {
@@ -688,16 +689,6 @@ _do_set:
                 break;
         }
     }
-    printf(
-        "bc: %04x de: %04x hl: %04x af: %04x sp: %04x pc: %04x ime: %d state: %d prefix: %d\r",
-        regs->bc, regs->de, regs->hl, regs->af, regs->sp, regs->pc, regs->ime, regs->state, pfx
-    );
-#if DEBUG
-    fprintf(stderr,
-        "bc: %04x de: %04x hl: %04x af: %04x sp: %04x pc: %04x ime: %d state: %d prefix: %d\n",
-        regs->bc, regs->de, regs->hl, regs->af, regs->sp, regs->pc, regs->ime, regs->state, pfx
-    );
-#endif
 }
 
 void run_insn(struct registers* regs) {
@@ -723,10 +714,11 @@ void run_insn(struct registers* regs) {
     typed_ptr_dbg(p1_str, p1);
     typed_ptr_dbg(p2_str, p2);
     fprintf(stderr,
-        "Running %s(%02x) %s%s, %s%s\n",
+        "%s(%02x) %s%s, %s%s ; %04x\n",
         insn_names[(i.op < sizeof(insn_names) / sizeof(insn_names[0])) ? i.op : 0], opcode, 
         param_names[(i.p1 < sizeof(insn_names) / sizeof(insn_names[0])) ? i.p1 : 0], p1_str,
-        param_names[(i.p2 < sizeof(insn_names) / sizeof(insn_names[0])) ? i.p2 : 0], p2_str
+        param_names[(i.p2 < sizeof(insn_names) / sizeof(insn_names[0])) ? i.p2 : 0], p2_str,
+        regs->pc - 1
     );
 #endif
     switch(i.op) {
@@ -1180,16 +1172,6 @@ _do_ret:
         default:
             break;
     }
-    printf(
-        "bc: %04x de: %04x hl: %04x af: %04x sp: %04x pc: %04x ime: %d state: %d prefix: %d\r",
-        regs->bc, regs->de, regs->hl, regs->af, regs->sp, regs->pc, regs->ime, regs->state, pfx
-    );
-#if DEBUG
-    fprintf(stderr,
-        "bc: %04x de: %04x hl: %04x af: %04x sp: %04x pc: %04x ime: %d state: %d prefix: %d\n",
-        regs->bc, regs->de, regs->hl, regs->af, regs->sp, regs->pc, regs->ime, regs->state, pfx
-    );
-#endif
 }
 
 enum int_status {

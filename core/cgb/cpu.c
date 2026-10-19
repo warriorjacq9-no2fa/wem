@@ -425,7 +425,7 @@ void run_insn_pfx(struct registers* regs, uint8_t opcode) {
                 break;
             case 0x28: // SRA
                 regs->f &= ~(FLAG_N | FLAG_H);
-                scratch = val >> 1 | (*param & 0x80);
+                scratch = val >> 1 | (val & 0x80);
                 
                 if(val & 0x01)
                     regs->f |= FLAG_C;
@@ -434,7 +434,7 @@ void run_insn_pfx(struct registers* regs, uint8_t opcode) {
                 
                 memwrite(regs->hl, scratch);
 
-                if(val == 0)
+                if(scratch == 0)
                     regs->f |= FLAG_Z;
                 else
                     regs->f &= ~FLAG_Z;
@@ -692,6 +692,9 @@ _do_set:
 }
 
 void run_insn(struct registers* regs) {
+#if DEBUG
+    uint16_t pc = regs->pc;
+#endif
     uint8_t opcode = memread(regs->pc++);
     if(pfx) {
         run_insn_pfx(regs, opcode);
@@ -718,7 +721,7 @@ void run_insn(struct registers* regs) {
         insn_names[(i.op < sizeof(insn_names) / sizeof(insn_names[0])) ? i.op : 0], opcode, 
         param_names[(i.p1 < sizeof(insn_names) / sizeof(insn_names[0])) ? i.p1 : 0], p1_str,
         param_names[(i.p2 < sizeof(insn_names) / sizeof(insn_names[0])) ? i.p2 : 0], p2_str,
-        regs->pc - 1
+        pc
     );
 #endif
     switch(i.op) {
@@ -733,7 +736,8 @@ void run_insn(struct registers* regs) {
                         break;
                     case U16:
                     case S16:
-                        memwrite(p1.a, *p2.u16);
+                        memwrite(p1.a, *p2.u16 & 0xFF);
+                        memwrite(p1.a + 1, *p2.u16 >> 8);
                         break;
                     default:
                         break;
@@ -758,7 +762,7 @@ void run_insn(struct registers* regs) {
                 case U8:
                 case S8:
                     regs->f &= ~FLAG_N;
-                    if(*p1.u8 == 0xF) regs->f |= FLAG_H;
+                    if((*p1.u8 & 0xF) == 0xF) regs->f |= FLAG_H;
                     else regs->f &= ~FLAG_H;
                     scratch = *p1.u8;
 
@@ -783,7 +787,7 @@ void run_insn(struct registers* regs) {
                 case U8:
                 case S8:
                     regs->f |= FLAG_N;
-                    if(*p1.u8 == 0) regs->f |= FLAG_H;
+                    if((*p1.u8 & 0xF) == 0) regs->f |= FLAG_H;
                     else regs->f &= ~FLAG_H;
                     scratch = *p1.u8;
 
@@ -809,21 +813,28 @@ void run_insn(struct registers* regs) {
 
             if(i.op == ADC) {
                 if((*p1.u8 & 0xF) + (*p2.u8 & 0xF) +
-                    (regs->f & FLAG_C) ? 1 : 0 > 0xF)
+                    (regs->f & FLAG_C ? 1 : 0) > 0xF)
                     regs->f |= FLAG_H;
                 else
                     regs->f &= ~FLAG_H;
             } else {
-                if((*p1.u8 & 0xF) + (*p2.u8 & 0xF) > 0xF)
-                    regs->f |= FLAG_H;
-                else
-                    regs->f &= ~FLAG_H;
+                if(p1.type == U16) {
+                    if((*p1.u16 & 0x0F00) + (*p2.u8 & 0x0F00) > 0x0F00)
+                        regs->f |= FLAG_H;
+                    else
+                        regs->f &= ~FLAG_H;
+                } else {
+                    if((*p1.u8 & 0xF) + (*p2.u8 & 0xF) > 0xF)
+                        regs->f |= FLAG_H;
+                    else
+                        regs->f &= ~FLAG_H;
+                }
             }
             switch(p1.type) {
                 case U8:
                     if(i.op == ADC)
                         scratch = *p1.u8 + *p2.u8 + 
-                            (regs->f & FLAG_C) ? 1 : 0;
+                            (regs->f & FLAG_C ? 1 : 0);
                     else
                         scratch = *p1.u8 + *p2.u8;
 
@@ -832,7 +843,7 @@ void run_insn(struct registers* regs) {
                     else
                         regs->f &= ~FLAG_C;
 
-                    if(scratch == 0)
+                    if((scratch & 0xFF) == 0)
                         regs->f |= FLAG_Z;
                     else
                         regs->f &= ~FLAG_Z;
@@ -867,7 +878,7 @@ void run_insn(struct registers* regs) {
 
             if(i.op == SBC) {
                 if((*p1.u8 & 0xF) < (*p2.u8 & 0xF) +
-                    (regs->f & FLAG_C) ? 1 : 0 > 0xF)
+                    (regs->f & FLAG_C ? 1 : 0))
                     regs->f |= FLAG_H;
                 else
                     regs->f &= ~FLAG_H;
@@ -879,7 +890,7 @@ void run_insn(struct registers* regs) {
             }
             if(i.op == SBC)
                 scratch = *p1.u8 - (*p2.u8 + 
-                    (regs->f & FLAG_C) ? 1 : 0);
+                    (regs->f & FLAG_C ? 1 : 0));
             else
                 scratch = *p1.u8 - *p2.u8;
 
@@ -888,7 +899,7 @@ void run_insn(struct registers* regs) {
             else
                 regs->f &= ~FLAG_C;
 
-            if(scratch == 0)
+            if((scratch & 0xFF) == 0)
                 regs->f |= FLAG_Z;
             else
                 regs->f &= ~FLAG_Z;
@@ -952,70 +963,92 @@ void run_insn(struct registers* regs) {
             break;
         case RLCA:
             regs->f &= ~(FLAG_Z | FLAG_N | FLAG_H);
-            scratch = regs->f << 1;
-            if(regs->f & 0x8000) {
+            scratch = regs->a << 1;
+            if(regs->a & 0x80) {
                 regs->f |= FLAG_C;
-                scratch |= 0x0100;
+                scratch |= 0x01;
             } else {
                 regs->f &= ~FLAG_C;
-                scratch &= ~0x0100;
+                scratch &= ~0x01;
             }
 
-            regs->f &= 0x00FF;
-            regs->f |= (scratch << 8) & 0xFF00;
+            regs->a = scratch;
             break;
         case RRCA:
             regs->f &= ~(FLAG_Z | FLAG_N | FLAG_H);
-            scratch = regs->f >> 1;
-            if(regs->f & 0x0100) {
+            scratch = regs->a >> 1;
+            if(regs->a & 0x01) {
                 regs->f |= FLAG_C;
-                scratch |= 0x8000;
+                scratch |= 0x80;
             } else {
                 regs->f &= ~FLAG_C;
-                scratch &= ~0x8000;
+                scratch &= ~0x80;
             }
 
-            regs->f &= 0x00FF;
-            regs->f |= (scratch << 8) & 0xFF00;
+            regs->a = scratch;
             break;
         case RLA:
             regs->f &= ~(FLAG_Z | FLAG_N | FLAG_H);
-            scratch = regs->f << 1;
-            if(regs->f & 0x8000)
+            scratch = regs->a << 1;
+
+            if(regs->f & FLAG_C)
+                scratch |= 0x01;
+            else
+                scratch &= ~0x01;
+
+            if(regs->a & 0x80)
                 regs->f |= FLAG_C;
             else
                 regs->f &= ~FLAG_C;
 
-            regs->f &= 0x00FF;
-            regs->f |= (scratch << 8) & 0xFF00;
+            regs->a = scratch;
             break;
         case RRA:
             regs->f &= ~(FLAG_Z | FLAG_N | FLAG_H);
-            if(regs->f & 0x0100)
+            scratch = regs->a >> 1;
+
+            if(regs->f & FLAG_C)
+                scratch |= 0x80;
+            else
+                scratch &= ~0x80;
+
+            if(regs->a & 0x01)
                 regs->f |= FLAG_C;
             else
                 regs->f &= ~FLAG_C;
 
-            scratch = regs->f >> 1;
-            regs->f &= 0x00FF;
-            regs->f |= (scratch << 8) & 0xFF00;
+            regs->a = scratch;
             break;
         case DAA:
-            scratch = regs->f >> 8;
-            if((scratch & 0x0F) > 0x09 || regs->f & FLAG_H)
-                scratch += 0x06;
+            scratch = regs->a;
+            if(regs->f & FLAG_N) {
+                if(regs->f & FLAG_H)
+                    scratch -= 0x06;
 
-            if((scratch & 0xF0) > 0x90 || regs->f & FLAG_C)
-                scratch += 0x60;
+                if(regs->f & FLAG_C)
+                    scratch -= 0x60;
+            } else {
+                if((scratch & 0x0F) > 0x09 || regs->f & FLAG_H)
+                    scratch += 0x06;
 
-            regs->f &= 0x00FF;
-            regs->f |= scratch << 8;
+                if(scratch > 0x99 || regs->f & FLAG_C) {
+                    scratch += 0x60;
+                    regs->f |= FLAG_C;
+                }
+
+            }
+
+            if(scratch == 0)
+                regs->f |= FLAG_Z;
+            else
+                regs->f &= ~FLAG_Z;
+            
+            regs->f &= ~FLAG_H;
+
+            regs->a = scratch;
             break;
         case CPL:
-            scratch = regs->f >> 8;
-            scratch = ~scratch;
-            regs->f &= 0x00FF;
-            regs->f |= scratch << 8;
+            regs->a = ~regs->a;
 
             regs->f |= FLAG_N | FLAG_H;
             break;
@@ -1024,10 +1057,8 @@ void run_insn(struct registers* regs) {
             regs->f &= ~(FLAG_N | FLAG_H);
             break;
         case CCF:
-            if(regs->f & FLAG_C)
-                regs->f &= ~FLAG_C;
-            else
-                regs->f |= FLAG_C;
+            regs->f ^= FLAG_C;
+            regs->f &= ~(FLAG_N | FLAG_H);
             break;
         case JR:
             switch(i.p1) {

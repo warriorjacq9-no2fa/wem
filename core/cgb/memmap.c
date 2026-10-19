@@ -1,5 +1,4 @@
 #include "memmap.h"
-#include <stdio.h>
 #include <string.h>
 #include "ppu.h"
 
@@ -15,11 +14,9 @@ static uint8_t reg_ie;
 
 static uint8_t rom_00[16384];
 static uint8_t rom_nn[16384];
-static uint8_t vram[8192];
 static uint8_t eram[8192];
 static uint8_t wram0[4096];
 static uint8_t wram1[4096];
-static uint8_t oam[160];
 static uint8_t hram[128];
 
 static const uint8_t dmg_boot[]  = {
@@ -69,6 +66,8 @@ uint8_t memread(uint16_t addr) {
         case REG_PPU_BGP:   return reg_ppu_bgp;
         case REG_PPU_OBP0:  return reg_ppu_obp0;
         case REG_PPU_OBP1:  return reg_ppu_obp1;
+        case REG_PPU_WY:    return reg_ppu_wy;
+        case REG_PPU_WX:    return reg_ppu_wx;
         case REG_DMA:       return reg_dma;
         case REG_BANK:      return reg_bank;
         case REG_IE:        return reg_ie;
@@ -112,7 +111,7 @@ void memwrite(uint16_t addr, uint8_t val) {
         case REG_TMA:       reg_tma = val; break;
         case REG_TAC:       reg_tac = val; break;
         case REG_IF:        reg_if = val; break;
-        case REG_PPU_LCDC:  reg_ppu_lcdc = val; fprintf(stderr, "LCDC set %02x\n", val); break;
+        case REG_PPU_LCDC:  reg_ppu_lcdc = val; break;
         case REG_PPU_STAT:  reg_ppu_stat = val & 0b01111000; break;
         case REG_PPU_SCY:   reg_ppu_scy = val; break;
         case REG_PPU_SCX:   reg_ppu_scx = val; break;
@@ -121,11 +120,15 @@ void memwrite(uint16_t addr, uint8_t val) {
         case REG_PPU_BGP:   reg_ppu_bgp = val; break;
         case REG_PPU_OBP0:  reg_ppu_obp0 = val; break;
         case REG_PPU_OBP1:  reg_ppu_obp1 = val; break;
+        case REG_PPU_WY:    reg_ppu_wy = val; break;
+        case REG_PPU_WX:    reg_ppu_wx = val; break;
         case REG_DMA:       reg_dma = val; break;
         case REG_BANK:      reg_bank = val & 0b00000001; break;
         case REG_IE:        reg_ie = val; break;
         default:
-            if(addr > 0x7FFF && addr < 0xA000 && !vram_block)
+            if(addr < 0x8000)
+                return;
+            else if(addr < 0xA000 && !vram_block)
                 vram[addr - 0x8000] = val;
             else if(addr < 0xC000)
                 eram[addr - 0xA000] = val;

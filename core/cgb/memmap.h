@@ -27,9 +27,8 @@
 #define REG_PPU_BGP     0xFF47
 #define REG_PPU_OBP0    0xFF48
 #define REG_PPU_OBP1    0xFF49
-
-#define REG_WY          0xFF4A
-#define REG_WX          0xFF4B
+#define REG_PPU_WY      0xFF4A
+#define REG_PPU_WX      0xFF4B
 
 #define REG_BANK        0xFF50
 

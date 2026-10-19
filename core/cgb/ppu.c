@@ -1,7 +1,9 @@
 #include "memmap.h"
+#include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 
 #define S_HBLANK    0x00
 #define S_VBLANK    0x01
@@ -30,16 +32,31 @@
 #define SF_YFLIP    0x40 // If set, flip sprite vertically
 #define SF_XFLIP    0x20 // If set, flip sprite horizontally
 
+enum pix_layer {
+    PL_BKG,
+    PL_WIN,
+    PL_SPR,
+};
+
+struct pixel {
+    bool present;
+    enum pix_layer layer;
+    uint8_t color_idx;
+};
+
 static uint16_t dot;
 static uint16_t sprites[10];
-static uint16_t bg_fifo;
+static struct pixel bg_fifo[8];
 //static uint16_t spr_fifo;
 
 uint8_t
     reg_ppu_lcdc, reg_ppu_stat,
     reg_ppu_scy, reg_ppu_scx,
     reg_ppu_ly, reg_ppu_lyc,
-    reg_ppu_bgp, reg_ppu_obp0, reg_ppu_obp1;
+    reg_ppu_bgp, reg_ppu_obp0, reg_ppu_obp1,
+    reg_ppu_wy, reg_ppu_wx;
+uint8_t vram[8192];
+uint8_t oam[160];
 
 bool oam_block, vram_block;
 
@@ -53,15 +70,15 @@ enum ppu_bgfetch {
 void init_ppu() {
 }
 
-uint16_t get_tile(uint8_t tile) {
+static inline uint16_t get_tile(uint8_t tile) {
     if(reg_ppu_lcdc & LCDC_TILEADDR) {
-        return 0x8000 + tile * 0x10;
+        return tile * 0x10;
     } else {
-        return 0x9000 + (int8_t)tile * 0x10;
+        return 0x1000 + (int8_t)tile * 0x10;
     }
 }
 
-uint16_t get_sprite_tile(uint8_t tile) {
+inline uint16_t get_sprite_tile(uint8_t tile) {
     return 0x8000 + tile * 0x10;
 }
 
@@ -74,18 +91,34 @@ uint16_t intl(uint8_t x, uint8_t y) {
     return res;
 }
 
+static inline int fifo_len(struct pixel* fifo) {
+    for(int i = 7; i >= 0; i--) {
+        if(fifo[i].present) return i + 1;
+    }
+    return 0;
+}
+
 static uint8_t tile, tilehi, tilelo;
-static uint8_t idx, xpos, wline;
-static bool window;
+static uint8_t idx, xpos, tpos, wline;
+static uint8_t discard;
+static bool window, did_window;
+static bool wy_latch;
 void run_ppu(uint32_t* pixels) {
     if(!(reg_ppu_lcdc & LCDC_EN)) {
+        window = false; did_window = false;
+        wy_latch = false;
+        wline = 0;
+        oam_block = false;
+        vram_block = false;
+        memset(bg_fifo, 0, sizeof(bg_fifo));
         reg_ppu_stat &= ~0x03;
-        reg_ppu_stat |= S_HBLANK;
+        reg_ppu_stat |= S_OAM;
         reg_ppu_ly = 0;
+        idx = 0;
         dot = 0;
 #if DEBUG
-    fprintf(stderr, "PPU disabled, dot: %d line: %d state: %d fifo: %04x\n",
-        dot, reg_ppu_ly, reg_ppu_stat & 0x03, bg_fifo
+    fprintf(stderr, "PPU disabled, dot: %d line: %d state: %d fifo len: %d\n",
+        dot, reg_ppu_ly, reg_ppu_stat & 0x03, fifo_len(bg_fifo)
     );
 #endif
         return;
@@ -95,16 +128,18 @@ void run_ppu(uint32_t* pixels) {
             oam_block = true;
             vram_block = false;
             if(dot >= 80) {
-                xpos = 0;
+                window = false; did_window = false;
+                xpos = 0; tpos = 0;
+                discard = reg_ppu_scx % 8;
+                bgfetch_state = BGF_TILE;
                 reg_ppu_stat &= ~0x03;
                 reg_ppu_stat |= S_DRAW;
                 break;
             }
             if(dot % 2 == 0 && idx < 10) {
-                uint8_t y = memread(0xFE00 + dot * 2);
-                uint8_t x = memread(0xFE00 + dot * 2 + 1);
+                uint8_t y = oam[dot * 2];
                 uint8_t height = (reg_ppu_lcdc & LCDC_SPRSZ) ? 16 : 8;
-                if(x >= 8 && reg_ppu_ly + 16 >= y && reg_ppu_ly + 16 < y + height) {
+                if(reg_ppu_ly + 16 >= y && reg_ppu_ly + 16 < y + height) {
                     sprites[idx] = 0xFE00 + dot * 2;
                     idx++;
                 }
@@ -116,50 +151,56 @@ void run_ppu(uint32_t* pixels) {
             switch(bgfetch_state) {
                 case BGF_TILE:
                     if(!window) {
-                        tile = memread((reg_ppu_lcdc & LCDC_BGTL ? 0x9C00 : 0x9800) + 
-                            ((xpos + (reg_ppu_scx / 8 & 0x1F)) & 0x3FF) +
-                            (32 * (((reg_ppu_ly + reg_ppu_scy) & 0xFF) / 8) & 0x3FF)
-                        );
+                        uint16_t col = (tpos + (reg_ppu_scx / 8 & 0x1F)) & 0x1F;
+                        uint16_t row = (((reg_ppu_ly + reg_ppu_scy) & 0xFF) / 8) & 0x1F;
+                        tile = vram[(reg_ppu_lcdc & LCDC_BGTL ? 0x1C00 : 0x1800) + 
+                            col + 32 * row
+                        ];
                     } else {
-                        tile = memread((reg_ppu_lcdc & LCDC_WINTL ? 0x9C00 : 0x9800) + 
-                            (xpos & 0x3FF) +
-                            (32 * (wline / 8) & 0x3FF)
-                        );
+                        tile = vram[(reg_ppu_lcdc & LCDC_WINTL ? 0x1C00 : 0x1800) + 
+                            (tpos & 0x1F) + 32 * ((wline / 8) & 0x1F)
+                        ];
                     }
+                    tpos++;
                     bgfetch_state = BGF_TILELO;
                     break;
                 case BGF_TILELO:
-                    tilelo = memread(get_tile(tile) + (window ?
+                    tilelo = vram[get_tile(tile) + (window ?
                         2 * (wline % 8) :
                         2 * ((reg_ppu_ly + reg_ppu_scy) % 8))
-                    );
+                    ];
                     bgfetch_state = BGF_TILEHI;
                     break;
                 case BGF_TILEHI:
-                    tilehi = memread(get_tile(tile) + (window ?
+                    tilehi = vram[get_tile(tile) + (window ?
                         2 * (wline % 8) :
                         2 * ((reg_ppu_ly + reg_ppu_scy) % 8))
                         + 1
-                    );
+                    ];
                     bgfetch_state = BGF_PUSH;
                     break;
                 case BGF_PUSH:
-                    if(bg_fifo != 0) break;
+                    if(fifo_len(bg_fifo) != 0) break;
+                    if(xpos >= 160) {
+                        reg_ppu_stat &= ~0x03;
+                        reg_ppu_stat |= S_HBLANK;
+                        if(reg_ppu_stat & STAT_INT_HBLANK) {
+#if DEBUG
+                            fprintf(stderr, "PPU: triggered HBLANK interrupt\n");
+#endif
+                            memwrite(REG_IF, memread(REG_IF) | 0x02);
+                        }
+                        break;
+                    }
                     uint16_t row = intl(tilelo, tilehi);
                     for(int i = 0; i < 8; i++) {
                         uint8_t p_idx = (row & (0x03 << (i * 2))) >> (i * 2);
-                        uint8_t pix = (reg_ppu_bgp & (0x03 << p_idx * 2)) >> p_idx * 2;
-                        bg_fifo |= (pix & 0x03) << i * 2;
+                        bg_fifo[7 - i].color_idx = p_idx;
+                        bg_fifo[7 - i].present = true;
+                        bg_fifo[7 - i].layer = window ? PL_WIN : PL_BKG;
                     }
 
-                    xpos++;
-                    if(xpos == 20) {
-                        bgfetch_state = BGF_TILE;
-                        reg_ppu_stat &= ~0x03;
-                        reg_ppu_stat |= S_HBLANK;
-                        if(reg_ppu_stat & STAT_INT_HBLANK)
-                            memwrite(REG_IF, memread(REG_IF) | 0x02);
-                    }
+                    bgfetch_state = BGF_TILE;
                     break;
             }
             break;
@@ -169,22 +210,39 @@ void run_ppu(uint32_t* pixels) {
             if(dot >= 456) {
                 dot = 0;
                 reg_ppu_ly++;
+                if(did_window) wline++;
                 if(reg_ppu_ly == 144) {
+#if DEBUG
+                    fprintf(stderr, "PPU: triggered VBLANK interrupt\n");
+#endif
                     memwrite(REG_IF, memread(REG_IF) | 0x01);
                     wline = 0;
                     reg_ppu_stat &= ~0x03;
                     reg_ppu_stat |= S_VBLANK;
-                    if(reg_ppu_stat & STAT_INT_VBLANK)
+                    if(reg_ppu_stat & STAT_INT_VBLANK) {
+#if DEBUG
+                        fprintf(stderr, "PPU: triggered VBLANK STAT interrupt\n");
+#endif
                         memwrite(REG_IF, memread(REG_IF) | 0x02);
+                    }
                 } else {
+                    idx = 0;
                     reg_ppu_stat &= ~0x03;
                     reg_ppu_stat |= S_OAM;
-                    if(reg_ppu_stat & STAT_INT_OAM)
+                    if(reg_ppu_stat & STAT_INT_OAM) {
+#if DEBUG
+                        fprintf(stderr, "PPU: triggered OAM interrupt\n");
+#endif
                         memwrite(REG_IF, memread(REG_IF) | 0x02);
+                    }
                 }
             }
             break;
         case S_VBLANK:
+            wline = 0;
+            wy_latch = false;
+            oam_block = false;
+            vram_block = false;
             if(dot >= 456) {
                 dot = 0;
                 reg_ppu_ly++;
@@ -193,31 +251,73 @@ void run_ppu(uint32_t* pixels) {
                     idx = 0;
                     reg_ppu_stat &= ~0x03;
                     reg_ppu_stat |= S_OAM;
-                    if(reg_ppu_stat & STAT_INT_OAM)
+                    if(reg_ppu_stat & STAT_INT_OAM) {
+#if DEBUG
+            fprintf(stderr, "PPU: triggered OAM interrupt\n");
+#endif
                         memwrite(REG_IF, memread(REG_IF) | 0x02);
+                    }
                 }
             }
             break;
     }
-    if(reg_ppu_ly == reg_ppu_lyc) {
+    if(!wy_latch && reg_ppu_wy == reg_ppu_ly) wy_latch = true; 
+    if(reg_ppu_ly == reg_ppu_lyc && !(reg_ppu_stat & STAT_LYC)) {
         reg_ppu_stat |= STAT_LYC;
         if(reg_ppu_stat & STAT_INT_LYC) {
+#if DEBUG
+            fprintf(stderr, "PPU: triggered LYC interrupt\n");
+#endif
             memwrite(REG_IF, memread(REG_IF) | 0x02);
         }
-    } else {
+    } else if(reg_ppu_ly != reg_ppu_lyc) {
         reg_ppu_stat &= ~STAT_LYC;
     }
     dot++;
     // Push FIFO to LCD
-    if(bg_fifo != 0) {
-        uint8_t pix = (bg_fifo & 0x03) * (256 / 4);
-        bg_fifo >>= 2;
-        uint8_t x = xpos * 8 + dot % 8;
-        pixels[reg_ppu_ly * 144 + x] = 0 | pix | pix << 8 | pix << 16;
+    if(fifo_len(bg_fifo) != 0) {
+        if(!window && discard > 0) {
+            discard--;
+        } else {
+            uint8_t c_idx = bg_fifo[0].color_idx;
+            uint8_t color = (reg_ppu_bgp & (0x03 << c_idx * 2)) >> c_idx * 2;
+            uint8_t pix = 255 - (color & 0x03) * 85;
+
+            switch(bg_fifo[0].layer) {
+                case PL_BKG:
+                    if(reg_ppu_lcdc & LCDC_BGEN)
+                        pixels[reg_ppu_ly * 160 + xpos] = 0xFF000000 | pix | pix << 8 | pix << 16;
+                    break;
+                case PL_WIN:
+                    if((reg_ppu_lcdc & LCDC_BGEN) && (reg_ppu_lcdc & LCDC_WINEN)) {
+                        did_window = true;
+                        pixels[reg_ppu_ly * 160 + xpos] = 0xFF000000 | pix | pix << 8 | pix << 16;
+                    }
+                    break;
+                case PL_SPR:
+                    break;
+            }
+            xpos++;
+        }
+
+        for(int i = 1; i < 8; i++) {
+            bg_fifo[i-1] = bg_fifo[i];
+        }
+        bg_fifo[7].present = false;
+
+        if(reg_ppu_lcdc & LCDC_WINEN) {
+            int win_x = (int)reg_ppu_wx - 7;
+            if(!window && wy_latch && xpos >= win_x) {
+                window = true;
+                bgfetch_state = BGF_TILE;
+                tpos = 0;
+                memset(bg_fifo, 0, sizeof(bg_fifo));
+            }
+        }
     }
 #if DEBUG
-    fprintf(stderr, "PPU dot: %d line: %d xpos: %d stat: %02x fifo: %04x fetch: %d\n",
-        dot, reg_ppu_ly, xpos, reg_ppu_stat, bg_fifo, bgfetch_state
+    fprintf(stderr, "PPU dot: %d line: %d xpos: %d stat: %02x fifo len: %d fetch: %d\n",
+        dot, reg_ppu_ly, xpos, reg_ppu_stat, fifo_len(bg_fifo), bgfetch_state
     );
 #endif
 }

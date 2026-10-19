@@ -141,6 +141,7 @@ void run_ppu(uint32_t* pixels) {
                         2 * ((reg_ppu_ly + reg_ppu_scy) % 8))
                         + 1
                     );
+                    bgfetch_state = BGF_PUSH;
                     break;
                 case BGF_PUSH:
                     if(bg_fifo != 0) break;
@@ -152,7 +153,8 @@ void run_ppu(uint32_t* pixels) {
                     }
 
                     xpos++;
-                    if(xpos == 160) {
+                    if(xpos == 20) {
+                        bgfetch_state = BGF_TILE;
                         reg_ppu_stat &= ~0x03;
                         reg_ppu_stat |= S_HBLANK;
                         if(reg_ppu_stat & STAT_INT_HBLANK)
@@ -214,8 +216,8 @@ void run_ppu(uint32_t* pixels) {
         pixels[reg_ppu_ly * 144 + x] = 0 | pix | pix << 8 | pix << 16;
     }
 #if DEBUG
-    fprintf(stderr, "PPU dot: %d line: %d stat: %02x fifo: %04x\n",
-        dot, reg_ppu_ly, reg_ppu_stat, bg_fifo
+    fprintf(stderr, "PPU dot: %d line: %d xpos: %d stat: %02x fifo: %04x fetch: %d\n",
+        dot, reg_ppu_ly, xpos, reg_ppu_stat, bg_fifo, bgfetch_state
     );
 #endif
 }

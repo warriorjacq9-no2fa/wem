@@ -1,4 +1,5 @@
 #include "memmap.h"
+#include <stdio.h>
 #include <string.h>
 #include "ppu.h"
 
@@ -111,7 +112,7 @@ void memwrite(uint16_t addr, uint8_t val) {
         case REG_TMA:       reg_tma = val; break;
         case REG_TAC:       reg_tac = val; break;
         case REG_IF:        reg_if = val; break;
-        case REG_PPU_LCDC:  reg_ppu_lcdc = val; break;
+        case REG_PPU_LCDC:  reg_ppu_lcdc = val; fprintf(stderr, "LCDC set %02x\n", val); break;
         case REG_PPU_STAT:  reg_ppu_stat = val & 0b01111000; break;
         case REG_PPU_SCY:   reg_ppu_scy = val; break;
         case REG_PPU_SCX:   reg_ppu_scx = val; break;

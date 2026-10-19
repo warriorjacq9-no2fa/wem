@@ -21,6 +21,8 @@ struct typed_ptr {
         S8,
         S16,
     } type;
+    bool addr;
+    uint16_t a;
 };
 
 void typed_ptr_dbg(char* s, struct typed_ptr p) {
@@ -202,33 +204,45 @@ struct typed_ptr enum_param(enum param p, struct registers* regs) {
             res.u8 = (uint8_t*)&tmp;
             *res.u8 = memread(regs->c + 0xFF00);
             res.type = U8;
+            res.addr = true;
+            res.a = regs->c + 0xFF00;
             break;
         case A_BC:
             res.u8 = (uint8_t*)&tmp;
             *res.u8 = memread(regs->bc);
             res.type = U8;
+            res.addr = true;
+            res.a = regs->bc;
             break;
         case A_DE:
             res.u8 = (uint8_t*)&tmp;
             *res.u8 = memread(regs->de);
             res.type = U8;
+            res.addr = true;
+            res.a = regs->de;
             break;
         case A_HL:
             res.u8 = (uint8_t*)&tmp;
             *res.u8 = memread(regs->hl);
             res.type = U8;
+            res.addr = true;
+            res.a = regs->hl;
             break;
         case A_HLI:
             res.u8 = (uint8_t*)&tmp;
             *res.u8 = memread(regs->hl);
-            regs->hl++;
             res.type = U8;
+            res.addr = true;
+            res.a = regs->hl;
+            regs->hl++;
             break;
         case A_HLD:
             res.u8 = (uint8_t*)&tmp;
             *res.u8 = memread(regs->hl);
-            regs->hl--;
             res.type = U8;
+            res.addr = true;
+            res.a = regs->hl;
+            regs->hl--;
             break;
         case SP_SIMM8:
             res.u16 = &tmp;
@@ -253,20 +267,24 @@ struct typed_ptr enum_param(enum param p, struct registers* regs) {
             break;
         case A_IMM16:
             res.u8 = (uint8_t*)&tmp;
-            *res.u8 = memread(
-                memread(regs->pc) | (memread(regs->pc + 1) << 8)
-            );
+            res.addr = true;
+            res.a = memread(regs->pc) | (memread(regs->pc + 1) << 8);
+            *res.u8 = memread(res.a);
             res.type = U8;
             regs->pc += 2;
             break;
         case A_IMM8:
             res.u8 = (uint8_t*)&tmp;
-            *res.u8 = memread(memread(regs->pc++));
+            res.addr = true;
+            res.a = memread(regs->pc++);
+            *res.u8 = memread(res.a);
             res.type = U8;
             break;
         case AH_IMM8:
             res.u8 = (uint8_t*)&tmp;
-            *res.u8 = memread(memread(regs->pc++) + 0xFF00);
+            res.addr = true;
+            res.a = memread(regs->pc++) + 0xFF00;
+            *res.u8 = memread(res.a);
             res.type = U8;
             break;
         default:
@@ -715,17 +733,32 @@ void run_insn(struct registers* regs) {
         case NOP:
             break;
         case LD:
-            switch(p1.type) {
-                case U8:
-                case S8:
-                    *p1.u8 = *p2.u8;
-                    break;
-                case U16:
-                case S16:
-                    *p1.u16 = *p2.u16;
-                    break;
-                default:
-                    break;
+            if(p1.addr) {
+                switch(p2.type) {
+                    case U8:
+                    case S8:
+                        memwrite(p1.a, *p2.u8);
+                        break;
+                    case U16:
+                    case S16:
+                        memwrite(p1.a, *p2.u16);
+                        break;
+                    default:
+                        break;
+                }
+            } else {
+                switch(p1.type) {
+                    case U8:
+                    case S8:
+                        *p1.u8 = *p2.u8;
+                        break;
+                    case U16:
+                    case S16:
+                        *p1.u16 = *p2.u16;
+                        break;
+                    default:
+                        break;
+                }
             }
             break;
         case INC:
@@ -735,12 +768,15 @@ void run_insn(struct registers* regs) {
                     regs->f &= ~FLAG_N;
                     if(*p1.u8 == 0xF) regs->f |= FLAG_H;
                     else regs->f &= ~FLAG_H;
+                    scratch = *p1.u8;
 
-                    (*p1.u8)++;
-
-                    if(*p1.u8 == 0) regs->f |= FLAG_Z;
+                    if(scratch == 0xFF) regs->f |= FLAG_Z;
                     else regs->f &= ~FLAG_Z;
 
+                    if(p1.addr)
+                        memwrite(p1.a, scratch + 1);
+                    else
+                        (*p1.u8) = scratch + 1;
                     break;
                 case U16:
                 case S16:
@@ -757,12 +793,15 @@ void run_insn(struct registers* regs) {
                     regs->f |= FLAG_N;
                     if(*p1.u8 == 0) regs->f |= FLAG_H;
                     else regs->f &= ~FLAG_H;
+                    scratch = *p1.u8;
 
-                    (*p1.u8)--;
-
-                    if(*p1.u8 == 0) regs->f |= FLAG_Z;
+                    if(scratch == 1) regs->f |= FLAG_Z;
                     else regs->f &= ~FLAG_Z;
 
+                    if(p1.addr)
+                        memwrite(p1.a, scratch - 1);
+                    else
+                        (*p1.u8) = scratch - 1;
                     break;
                 case U16:
                 case S16:
@@ -806,7 +845,10 @@ void run_insn(struct registers* regs) {
                     else
                         regs->f &= ~FLAG_Z;
 
-                    *p1.u8 = (uint8_t)scratch;
+                    if(p1.addr)
+                        memwrite(p1.a, scratch);
+                    else
+                        *p1.u8 = (uint8_t)scratch;
                     break;
                 case U16:
                     if(p2.type == S8) {
@@ -859,7 +901,10 @@ void run_insn(struct registers* regs) {
             else
                 regs->f &= ~FLAG_Z;
 
-            *p1.u8 = (uint8_t)scratch;
+            if(p1.addr)
+                memwrite(p1.a, scratch);
+            else
+                *p1.u8 = (uint8_t)scratch;
             break;
         case AND:
             regs->f |= FLAG_H;

@@ -46,7 +46,7 @@ void typed_ptr_dbg(char* s, struct typed_ptr p) {
     }
 }
 
-#if DEBUG
+#if DEBUG >= 1
 static const char* const insn_names[] = {
     "NOP",
     "LD",
@@ -312,7 +312,7 @@ void run_insn_pfx(struct registers* regs, uint8_t opcode) {
         case 0x07: param = &regs->a; break;
         default: break;
     }
-#if DEBUG
+#if DEBUG >= 1
     char* pname = "";
     switch(opcode & 0x07) {
         case 0x00: pname = "B"; break;
@@ -694,7 +694,7 @@ _do_set:
 }
 
 void run_insn(struct registers* regs) {
-#if DEBUG
+#if DEBUG >= 1
     uint16_t pc = regs->pc;
 #endif
     uint8_t opcode = memread(regs->pc++);
@@ -714,7 +714,7 @@ void run_insn(struct registers* regs) {
         p2 = enum_param(i.p2, regs);
     }
     int scratch;
-#if DEBUG
+#if DEBUG >= 1
     char p1_str[8] = {0}, p2_str[8] = {0};
     typed_ptr_dbg(p1_str, p1);
     typed_ptr_dbg(p2_str, p2);
@@ -950,14 +950,12 @@ void run_insn(struct registers* regs) {
             else
                 regs->f &= ~FLAG_H;
 
-            scratch = *p1.u8 - *p2.u8;
-
-            if(scratch < 0)
+            if(*p1.u8 < *p2.u8)
                 regs->f |= FLAG_C;
             else
                 regs->f &= ~FLAG_C;
 
-            if(scratch == 0)
+            if(*p1.u8 - *p2.u8 == 0)
                 regs->f |= FLAG_Z;
             else
                 regs->f &= ~FLAG_Z;

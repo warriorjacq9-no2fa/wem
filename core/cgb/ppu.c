@@ -127,7 +127,7 @@ void run_ppu(uint32_t* pixels) {
         reg_ppu_ly = 0;
         idx = 0;
         dot = 0;
-#if DEBUG
+#if DEBUG >= 2
     fprintf(stderr, "PPU disabled, dot: %d line: %d state: %d fifo len: %d\n",
         dot, reg_ppu_ly, reg_ppu_stat & 0x03, fifo_len(bg_fifo)
     );
@@ -165,7 +165,7 @@ void run_ppu(uint32_t* pixels) {
                 reg_ppu_stat &= ~0x03;
                 reg_ppu_stat |= S_HBLANK;
                 if(reg_ppu_stat & STAT_INT_HBLANK) {
-#if DEBUG
+#if DEBUG >= 2
                     fprintf(stderr, "PPU: triggered HBLANK interrupt\n");
 #endif
                     memwrite(REG_IF, memread(REG_IF) | 0x02);
@@ -244,7 +244,7 @@ void run_ppu(uint32_t* pixels) {
                             uint8_t pos = (oam[s_idx * 4 + 3] & SF_XFLIP) ? i : 7 - i;
                             if(pos < clip) continue;
 
-                            struct pixel* entry = &spr_fifo[pos];
+                            struct pixel* entry = &spr_fifo[pos - clip];
                             if(!entry->present || entry->color_idx == 0) {
                                 entry->color_idx = c_idx;
                                 entry->present = true;
@@ -268,7 +268,8 @@ void run_ppu(uint32_t* pixels) {
             }
             if(!sprite) {
                 for(int i = 0; i < idx; i++) {
-                    if(oam[sprites[i] * 4 + 1] == xpos + 8) {
+                    uint8_t ox = oam[sprites[i] * 4 + 1];
+                    if(ox == xpos + 8 || (xpos == 0 && ox < 8)) {
                         s_idx = sprites[i];
                         sprites[i] = 0;
                         for(int j = i; j < idx - 1; j++) {
@@ -294,7 +295,7 @@ void run_ppu(uint32_t* pixels) {
                 reg_ppu_ly++;
                 if(did_window) wline++;
                 if(reg_ppu_ly == 144) {
-#if DEBUG
+#if DEBUG >= 2
                     fprintf(stderr, "PPU: triggered VBLANK interrupt\n");
 #endif
                     memwrite(REG_IF, memread(REG_IF) | 0x01);
@@ -302,7 +303,7 @@ void run_ppu(uint32_t* pixels) {
                     reg_ppu_stat &= ~0x03;
                     reg_ppu_stat |= S_VBLANK;
                     if(reg_ppu_stat & STAT_INT_VBLANK) {
-#if DEBUG
+#if DEBUG >= 2
                         fprintf(stderr, "PPU: triggered VBLANK STAT interrupt\n");
 #endif
                         memwrite(REG_IF, memread(REG_IF) | 0x02);
@@ -312,7 +313,7 @@ void run_ppu(uint32_t* pixels) {
                     reg_ppu_stat &= ~0x03;
                     reg_ppu_stat |= S_OAM;
                     if(reg_ppu_stat & STAT_INT_OAM) {
-#if DEBUG
+#if DEBUG >= 2
                         fprintf(stderr, "PPU: triggered OAM interrupt\n");
 #endif
                         memwrite(REG_IF, memread(REG_IF) | 0x02);
@@ -334,7 +335,7 @@ void run_ppu(uint32_t* pixels) {
                     reg_ppu_stat &= ~0x03;
                     reg_ppu_stat |= S_OAM;
                     if(reg_ppu_stat & STAT_INT_OAM) {
-#if DEBUG
+#if DEBUG >= 2
                         fprintf(stderr, "PPU: triggered OAM interrupt\n");
 #endif
                         memwrite(REG_IF, memread(REG_IF) | 0x02);
@@ -347,7 +348,7 @@ void run_ppu(uint32_t* pixels) {
     if(reg_ppu_ly == reg_ppu_lyc && !(reg_ppu_stat & STAT_LYC)) {
         reg_ppu_stat |= STAT_LYC;
         if(reg_ppu_stat & STAT_INT_LYC) {
-#if DEBUG
+#if DEBUG >= 2
             fprintf(stderr, "PPU: triggered LYC interrupt\n");
 #endif
             memwrite(REG_IF, memread(REG_IF) | 0x02);
@@ -436,7 +437,7 @@ void run_ppu(uint32_t* pixels) {
             }
         }
     }
-#if DEBUG
+#if DEBUG >= 2
     fprintf(stderr, "PPU dot: %d line: %d xpos: %d stat: %02x bgfifo len: %d sprfifo len: %d fetch: %d %s\n",
         dot, reg_ppu_ly, xpos, reg_ppu_stat, fifo_len(bg_fifo), fifo_len(spr_fifo), fetch_state, sprite ? "sprite" : (window ? "window" : "background")
     );

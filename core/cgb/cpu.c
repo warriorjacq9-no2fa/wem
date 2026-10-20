@@ -1,3 +1,5 @@
+// TODO: timing-accurate CPU
+
 #include "cpu.h"
 #include <stdio.h>
 #include <stddef.h>

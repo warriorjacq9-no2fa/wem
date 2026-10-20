@@ -1,3 +1,5 @@
+// TODO: clean up code in this file
+
 #include "memmap.h"
 #include <stddef.h>
 #include <stdint.h>
@@ -67,7 +69,9 @@ enum ppu_fetch {
     F_TILELO,
     F_TILEHI,
     F_PUSH,
-} fetch_state;
+};
+static enum ppu_fetch fetch_state;
+static enum ppu_fetch s_fetch_state;
 
 void init_ppu() {
 }
@@ -101,6 +105,8 @@ static inline int fifo_len(struct pixel* fifo) {
 }
 
 static uint8_t tile, tilehi, tilelo;
+static uint8_t s_tile, s_tilehi, s_tilelo;
+
 static uint8_t idx, xpos, tpos, wline;
 static uint8_t discard;
 static bool window, did_window;
@@ -143,8 +149,8 @@ void run_ppu(uint32_t* pixels) {
                 reg_ppu_stat |= S_DRAW;
                 break;
             }
-            if(dot % 2 == 0 && idx < 10) {
-                uint8_t y = oam[dot * 2];
+            if(dot % 2 == 1 && idx < 10) {
+                uint8_t y = oam[(dot / 2) * 4];
                 uint8_t height = (reg_ppu_lcdc & LCDC_SPRSZ) ? 16 : 8;
                 if(reg_ppu_ly + 16 >= y && reg_ppu_ly + 16 < y + height) {
                     sprites[idx] = dot / 2;
@@ -189,12 +195,15 @@ void run_ppu(uint32_t* pixels) {
                         uint8_t row = reg_ppu_ly + 16 - oam[s_idx * 4];
                         if(oam[s_idx * 4 + 3] & SF_YFLIP) {
                             if(reg_ppu_lcdc & LCDC_SPRSZ) {
-                                row = (16 - 1) + row;
+                                row = 15 - row;
                             } else {
-                                row = (8 - 1) + row;
+                                row = 7 - row;
                             }
                         }
-                        tilelo = vram[get_sprite_tile(row >= 8 ? tile + 1 : tile) + 2 * (row % 8)];
+                        if(reg_ppu_lcdc & LCDC_SPRSZ)
+                            tilelo = vram[get_sprite_tile(row >= 8 ? tile | 0x01 : tile & 0xFE) + 2 * (row % 8)];
+                        else
+                            tilelo = vram[get_sprite_tile(row >= 8 ? tile + 1 : tile) + 2 * (row % 8)];
                     } else if(window) {
                         tilelo = vram[get_tile(tile) + 2 * (wline % 8)];
                     } else {
@@ -212,7 +221,10 @@ void run_ppu(uint32_t* pixels) {
                                 row = 7 - row;
                             }
                         }
-                        tilehi = vram[get_sprite_tile(row >= 8 ? tile + 1 : tile) + 2 * (row % 8) + 1];
+                        if(reg_ppu_lcdc & LCDC_SPRSZ)
+                            tilehi = vram[get_sprite_tile(row >= 8 ? tile | 0x01 : tile & 0xFE) + 2 * (row % 8) + 1];
+                        else
+                            tilehi = vram[get_sprite_tile(row >= 8 ? tile + 1 : tile) + 2 * (row % 8) + 1];
                     } else if(window) {
                         tilehi = vram[get_tile(tile) + 2 * (wline % 8) + 1];
                     } else {
@@ -221,22 +233,27 @@ void run_ppu(uint32_t* pixels) {
                     fetch_state = F_PUSH;
                     break;
                 case F_PUSH:
-                    if(fifo_len(bg_fifo) != 0) break;
+                    if(!sprite && fifo_len(bg_fifo) != 0) break;
                     uint16_t row = intl(tilelo, tilehi);
                     if(sprite) {
+                        uint8_t ox = oam[s_idx * 4 + 1];
+                        uint8_t clip = ox < 8 ? 8 - ox : 0;
+
                         for(int i = 0; i < 8; i++) {
                             uint8_t c_idx = (row & (0x03 << (i * 2))) >> (i * 2);
-                            struct pixel* entry;
-                            if(oam[s_idx * 4 + 3] & SF_XFLIP)
-                                entry = &spr_fifo[i];
-                            else
-                                entry = &spr_fifo[7 - i];
+                            uint8_t pos = (oam[s_idx * 4 + 3] & SF_XFLIP) ? i : 7 - i;
+                            if(pos < clip) continue;
 
-                            entry->color_idx = c_idx;
-                            entry->present = true;
-                            entry->layer = PL_SPR;
-                            entry->spr_flags = oam[s_idx * 4 + 3];
+                            struct pixel* entry = &spr_fifo[pos];
+                            if(!entry->present || entry->color_idx == 0) {
+                                entry->color_idx = c_idx;
+                                entry->present = true;
+                                entry->layer = PL_SPR;
+                                entry->spr_flags = oam[s_idx * 4 + 3];
+                            }
                         }
+                        fetch_state = s_fetch_state;
+                        tile = s_tile; tilehi = s_tilehi; tilelo = s_tilelo;
                         sprite = false;
                     } else {
                         for(int i = 0; i < 8; i++) {
@@ -245,20 +262,23 @@ void run_ppu(uint32_t* pixels) {
                             bg_fifo[7 - i].present = true;
                             bg_fifo[7 - i].layer = window ? PL_WIN : PL_BKG;
                         }
+                        fetch_state = F_TILE;
                     }
-
-                    fetch_state = F_TILE;
                     break;
             }
             if(!sprite) {
                 for(int i = 0; i < idx; i++) {
-                    if(oam[sprites[i] * 4 + 1] <= xpos + 8) {
+                    if(oam[sprites[i] * 4 + 1] == xpos + 8) {
                         s_idx = sprites[i];
                         sprites[i] = 0;
                         for(int j = i; j < idx - 1; j++) {
                             sprites[j] = sprites[j + 1];
                         }
                         idx--;
+                        s_fetch_state = fetch_state;
+                        s_tile = tile;
+                        s_tilehi = tilehi;
+                        s_tilelo = tilelo;
                         fetch_state = F_TILE;
                         sprite = true;
                         break;
@@ -315,7 +335,7 @@ void run_ppu(uint32_t* pixels) {
                     reg_ppu_stat |= S_OAM;
                     if(reg_ppu_stat & STAT_INT_OAM) {
 #if DEBUG
-            fprintf(stderr, "PPU: triggered OAM interrupt\n");
+                        fprintf(stderr, "PPU: triggered OAM interrupt\n");
 #endif
                         memwrite(REG_IF, memread(REG_IF) | 0x02);
                     }
@@ -337,15 +357,16 @@ void run_ppu(uint32_t* pixels) {
     }
     dot++;
     // Push FIFO to LCD
-    if(fifo_len(bg_fifo) != 0) {
+    if(!sprite && fifo_len(bg_fifo) != 0) {
         if(!window && discard > 0) {
             discard--;
         } else {
             uint8_t color = (reg_ppu_bgp & (0x03 << bg_fifo[0].color_idx * 2)) >> bg_fifo[0].color_idx * 2;
             uint8_t pix = 255 - (color & 0x03) * 85;
-            if(fifo_len(spr_fifo) != 0 && !sprite) {
+            if(fifo_len(spr_fifo) != 0) {
                 if(
-                    spr_fifo[0].color_idx != 0 && (
+                    (reg_ppu_lcdc & LCDC_SPREN) && spr_fifo[0].color_idx != 0 && (
+                        !(reg_ppu_lcdc & LCDC_BGEN) ||
                         bg_fifo[0].color_idx == 0 ||
                         !(spr_fifo[0].spr_flags & SF_PRIORITY)
                     )
@@ -360,12 +381,15 @@ void run_ppu(uint32_t* pixels) {
                         case PL_BKG:
                             if(reg_ppu_lcdc & LCDC_BGEN)
                                 pixels[reg_ppu_ly * 160 + xpos] = 0xFF000000 | pix | pix << 8 | pix << 16;
+                            else
+                                pixels[reg_ppu_ly * 160 + xpos] = 0xFFFFFFFF;
                             break;
                         case PL_WIN:
                             if((reg_ppu_lcdc & LCDC_BGEN) && (reg_ppu_lcdc & LCDC_WINEN)) {
                                 did_window = true;
                                 pixels[reg_ppu_ly * 160 + xpos] = 0xFF000000 | pix | pix << 8 | pix << 16;
-                            }
+                            } else
+                                pixels[reg_ppu_ly * 160 + xpos] = 0xFFFFFFFF;
                             break;
                         default:
                             break;
@@ -380,12 +404,15 @@ void run_ppu(uint32_t* pixels) {
                     case PL_BKG:
                         if(reg_ppu_lcdc & LCDC_BGEN)
                             pixels[reg_ppu_ly * 160 + xpos] = 0xFF000000 | pix | pix << 8 | pix << 16;
+                        else
+                            pixels[reg_ppu_ly * 160 + xpos] = 0xFFFFFFFF;
                         break;
                     case PL_WIN:
                         if((reg_ppu_lcdc & LCDC_BGEN) && (reg_ppu_lcdc & LCDC_WINEN)) {
                             did_window = true;
                             pixels[reg_ppu_ly * 160 + xpos] = 0xFF000000 | pix | pix << 8 | pix << 16;
-                        }
+                        } else
+                            pixels[reg_ppu_ly * 160 + xpos] = 0xFFFFFFFF;
                         break;
                     default:
                         break;

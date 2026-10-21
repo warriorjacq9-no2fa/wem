@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <timer.h>
+#include <stdio.h>
 
 uint8_t
     reg_nr50, reg_nr51, reg_nr52,
@@ -50,8 +51,11 @@ uint8_t run_ch1() {
     if(timer_wait(&ch1_vol_timer)) {
         timer_start(&ch1_vol_timer, 65536 * (vol_pace ? vol_pace : 8));
         uint8_t v = (reg_nr12 & 0x08) ? ch1_vol + 1 : ch1_vol - 1;
-        if(vol_pace && v >= 0 && ch1_vol + v < 16)
+        if(vol_pace && v >= 0 && v < 16)
             ch1_vol = (uint8_t)v;
+#if DEBUG & 0x04
+        fprintf(stderr, "CH1 envelope pace: %u\n", vol_pace);
+#endif
     }
 
     uint16_t freq = reg_nr13 | (reg_nr14 & 0x07) << 8;
@@ -79,12 +83,18 @@ uint8_t run_ch1() {
                 ch1_shadow + (ch1_shadow / (2 * step));
             if(freq_next > 0x07FF) reg_nr52 &= ~0x01;
         }
+#if DEBUG & 0x04
+        fprintf(stderr, "CH1 sweep pace: %u step: %u freq_next: %u shadow: %u\n", sw_pace, step, freq_next, ch1_shadow);
+#endif
     }
 
     // Length timer
     if(timer_wait(&ch1_len_timer)) {
         timer_start(&ch1_len_timer, 16384);
         if(--ch1_len == 0) reg_nr52 &= ~0x01;
+#if DEBUG & 0x04
+        fprintf(stderr, "CH1 len %u\n", ch1_len);
+#endif
     }
 
     // Wave gen
@@ -95,13 +105,17 @@ uint8_t run_ch1() {
         switch(reg_nr11 & 0xC0) {
             case 0x00: waveform = 0b00000001; break;
             case 0x40: waveform = 0b10000001; break;
-            case 0x80: waveform = 0b10000111; break;
+            case 0x80: waveform = 0b11000011; break;
             case 0xC0: waveform = 0b01111110; break;
         }
         if(++ch1_step >= 8) ch1_step = 0;
         if(((waveform & (1 << ch1_step)) >> ch1_step)) ch1_out = ch1_vol;
         else ch1_out = 0;
+#if DEBUG & 0x04
+        fprintf(stderr, "CH1 wavegen step: %u vol: %u out: %u freq: %u wave: %02x\n\n", ch1_step, ch1_vol, ch1_out, freq, reg_nr11 & 0xC0);
+#endif
     }
+
     return ch1_out;
 }
 

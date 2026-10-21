@@ -9,7 +9,7 @@ void do_sample(int8_t sample) {
 }
 
 int frontend_run(int width, int height, uint32_t* pixelbuf) {
-    if(!SDL_Init(SDL_INIT_VIDEO)) {
+    if(!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
         SDL_Log("SDL_Init failed: %s", SDL_GetError());
         return -1;
     }

@@ -1,8 +1,8 @@
 GFX_OBJS = \
-graphics.o
+frontend.o
 
 GFX_HEADERS = \
-include/graphics.h
+include/frontend.h
 
 .PHONY: clean
 

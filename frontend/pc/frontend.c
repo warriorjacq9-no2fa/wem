@@ -2,7 +2,13 @@
 #include <SDL3/SDL_main.h>
 #include <stdbool.h>
 
-int graphics_run(int width, int height, uint32_t* pixelbuf) {
+static SDL_AudioStream* stream;
+
+void do_sample(int8_t sample) {
+    SDL_PutAudioStreamData(stream, &sample, 1);
+}
+
+int frontend_run(int width, int height, uint32_t* pixelbuf) {
     if(!SDL_Init(SDL_INIT_VIDEO)) {
         SDL_Log("SDL_Init failed: %s", SDL_GetError());
         return -1;
@@ -69,6 +75,20 @@ int graphics_run(int width, int height, uint32_t* pixelbuf) {
         SDL_DestroyWindow(window);
         SDL_Quit();
         return -1;
+    }
+
+    SDL_AudioSpec spec = (SDL_AudioSpec) {
+        .freq = 44100,
+        .channels = 2,
+        .format = SDL_AUDIO_S8
+    };
+
+    stream = SDL_OpenAudioDeviceStream(
+        SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL
+    );
+
+    if(stream) {
+        SDL_ResumeAudioStreamDevice(stream);
     }
 
     bool running = true;

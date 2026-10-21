@@ -1,6 +1,7 @@
 #include "memmap.h"
 #include <string.h>
 #include "ppu.h"
+#include "apu.h"
 
 static uint8_t reg_p1;
 static uint8_t reg_sb, reg_sc;
@@ -57,6 +58,27 @@ uint8_t memread(uint16_t addr) {
         case REG_TMA:       return reg_tma;
         case REG_TAC:       return reg_tac;
         case REG_IF:        return reg_if;
+        case REG_NR10:      return reg_nr10;
+        case REG_NR11:      return reg_nr11 & 0b11000000;
+        case REG_NR12:      return reg_nr12;
+        case REG_NR13:      return 0x00;
+        case REG_NR14:      return reg_nr14 & 0b01000000;
+        case REG_NR21:      return reg_nr21;
+        case REG_NR22:      return reg_nr22;
+        case REG_NR23:      return reg_nr23;
+        case REG_NR24:      return reg_nr24;
+        case REG_NR30:      return reg_nr30;
+        case REG_NR31:      return reg_nr31;
+        case REG_NR32:      return reg_nr32;
+        case REG_NR33:      return reg_nr33;
+        case REG_NR34:      return reg_nr34;
+        case REG_NR41:      return reg_nr41;
+        case REG_NR42:      return reg_nr42;
+        case REG_NR43:      return reg_nr43;
+        case REG_NR44:      return reg_nr44;
+        case REG_NR50:      return reg_nr50;
+        case REG_NR51:      return reg_nr51;
+        case REG_NR52:      return reg_nr52;
         case REG_PPU_LCDC:  return reg_ppu_lcdc;
         case REG_PPU_STAT:  return reg_ppu_stat;
         case REG_PPU_SCY:   return reg_ppu_scy;
@@ -111,6 +133,27 @@ void memwrite(uint16_t addr, uint8_t val) {
         case REG_TMA:       reg_tma = val; break;
         case REG_TAC:       reg_tac = val; break;
         case REG_IF:        reg_if = val; break;
+        case REG_NR10:      reg_nr10 = val; break;
+        case REG_NR11:      reg_nr11 = val; break;
+        case REG_NR12:      reg_nr12 = val; break;
+        case REG_NR13:      reg_nr13 = val; break;
+        case REG_NR14:      reg_nr14 = val; break;
+        case REG_NR21:      reg_nr21 = val; break;
+        case REG_NR22:      reg_nr22 = val; break;
+        case REG_NR23:      reg_nr23 = val; break;
+        case REG_NR24:      reg_nr24 = val; break;
+        case REG_NR30:      reg_nr30 = val; break;
+        case REG_NR31:      reg_nr31 = val; break;
+        case REG_NR32:      reg_nr32 = val; break;
+        case REG_NR33:      reg_nr33 = val; break;
+        case REG_NR34:      reg_nr34 = val; break;
+        case REG_NR41:      reg_nr41 = val; break;
+        case REG_NR42:      reg_nr42 = val; break;
+        case REG_NR43:      reg_nr43 = val; break;
+        case REG_NR44:      reg_nr44 = val; break;
+        case REG_NR50:      reg_nr50 = val; break;
+        case REG_NR51:      reg_nr51 = val; break;
+        case REG_NR52:      reg_nr52 = val; break;
         case REG_PPU_LCDC:  reg_ppu_lcdc = val; break;
         case REG_PPU_STAT:  reg_ppu_stat = val & 0b01111000; break;
         case REG_PPU_SCY:   reg_ppu_scy = val; break;

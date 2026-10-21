@@ -6,6 +6,8 @@
 
 #define ROM_SZ 32768
 #define MEM_SZ 65536
+#define CPU_HZ 4194304
+#define OUT_HZ 44100
 
 void load_rom(uint8_t* data);
 void poweron(struct registers* regs);

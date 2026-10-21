@@ -79,7 +79,7 @@ int frontend_run(int width, int height, uint32_t* pixelbuf) {
 
     SDL_AudioSpec spec = (SDL_AudioSpec) {
         .freq = 44100,
-        .channels = 2,
+        .channels = 1,
         .format = SDL_AUDIO_S8
     };
 
@@ -87,9 +87,16 @@ int frontend_run(int width, int height, uint32_t* pixelbuf) {
         SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL
     );
 
-    if(stream) {
-        SDL_ResumeAudioStreamDevice(stream);
+    if(!stream) {
+        SDL_Log("SDL_OpenAudioDeviceStream failed: %s", SDL_GetError());
+        SDL_DestroyTexture(texture);
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return -1;
     }
+
+    SDL_ResumeAudioStreamDevice(stream);
 
     bool running = true;
     SDL_Event event;

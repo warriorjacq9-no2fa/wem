@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <core.h>
-#include <graphics.h>
+#include <frontend.h>
 #include <unistd.h>
 
 uint32_t pixels[160*144];
@@ -12,6 +12,7 @@ uint32_t pixels[160*144];
 struct arguments {
     FILE* file;
     uint32_t* pixels;
+    void (*do_sample)(int8_t);
 };
 
 void* emu_thread(void* arg) {
@@ -32,7 +33,7 @@ void* emu_thread(void* arg) {
     load_rom(data);
     struct registers regs;
     poweron(&regs);
-    run(&regs, args->pixels);
+    run(&regs, args->pixels, args->do_sample);
     return NULL;
 }
 
@@ -58,7 +59,8 @@ int main(int argc, char** argv) {
 
     struct arguments args = (struct arguments) {
         .file = fp,
-        .pixels = pixels
+        .pixels = pixels,
+        .do_sample = do_sample,
     };
 
     printf("Creating emulation thread...\n");
@@ -68,7 +70,7 @@ int main(int argc, char** argv) {
     }
 
     printf("Initializing graphics...\n");
-    graphics_run(160, 144, pixels);
+    frontend_run(160, 144, pixels);
     pthread_kill(thread, SIGKILL);
     pthread_join(thread, NULL);
     return 0;

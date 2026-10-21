@@ -11,6 +11,6 @@ extern uint8_t
     reg_nr41, reg_nr42, reg_nr43, reg_nr44;
 
 void init_apu();
-void run_apu();
+void run_apu(void (*do_sample)(int8_t));
 
 #endif

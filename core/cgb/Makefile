@@ -3,6 +3,7 @@ cpu.o \
 instructions.o \
 memmap.o \
 ppu.o \
+apu.o \
 core.o
 
 CORE_HEADERS = \
@@ -10,7 +11,8 @@ include/core.h \
 cpu.h \
 instructions.h \
 memmap.h \
-ppu.h
+ppu.h \
+apu.h
 
 .PHONY: clean
 

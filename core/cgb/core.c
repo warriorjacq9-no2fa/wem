@@ -2,6 +2,7 @@
 #include "cpu.h"
 #include "memmap.h"
 #include "ppu.h"
+#include "apu.h"
 
 #define CLOCK_SPEED_HZ 4194304
 
@@ -11,9 +12,10 @@ void poweron(struct registers* regs) {
     *regs = (struct registers) {0};
     init_regs();
     init_ppu();
+    init_apu();
 }
 
-void run(struct registers* regs, uint32_t* pixels) {
+void run(struct registers* regs, uint32_t* pixels, void (*do_sample)(int8_t)) {
     last_time = clock();
     while(1) {
         clock_t now = clock();
@@ -23,6 +25,7 @@ void run(struct registers* regs, uint32_t* pixels) {
             for(unsigned int i = 0; i < elapsed_cycles; i++) {
                 run_cpu(regs);
                 run_ppu(pixels);
+                run_apu(do_sample);
             }
             last_time = now;
         }

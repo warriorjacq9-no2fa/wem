@@ -7,18 +7,19 @@ static SDL_AudioStream* stream;
 
 #define BATCH_SZ 512
 
-static int8_t batch[BATCH_SZ];
+static int8_t batch[BATCH_SZ * 2];
 static int nbatch;
 
 static int acc;
 
-void do_sample(int8_t sample) {
+void do_sample(int8_t left, int8_t right) {
     acc += OUT_HZ;
     if(acc < CPU_HZ) return;
     acc -= CPU_HZ;
 
-    batch[nbatch++] = sample;
-    if(nbatch == BATCH_SZ) {
+    batch[nbatch++] = left;
+    batch[nbatch++] = right;
+    if(nbatch == BATCH_SZ * 2) {
         SDL_PutAudioStreamData(stream, batch, nbatch);
         nbatch = 0;
     }
@@ -94,8 +95,8 @@ int frontend_run(int width, int height, uint32_t* pixelbuf) {
     }
 
     SDL_AudioSpec spec = (SDL_AudioSpec) {
-        .freq = 44100,
-        .channels = 1,
+        .freq = OUT_HZ,
+        .channels = 2,
         .format = SDL_AUDIO_S8
     };
 
@@ -170,6 +171,7 @@ int frontend_run(int width, int height, uint32_t* pixelbuf) {
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
+    SDL_DestroyAudioStream(stream);
     SDL_Quit();
 
     return 0;

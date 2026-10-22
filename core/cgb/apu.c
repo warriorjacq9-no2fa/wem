@@ -1,3 +1,5 @@
+// TODO: clean up code
+
 #include <stdint.h>
 #include <timer.h>
 #include <stdio.h>
@@ -14,6 +16,9 @@ struct timer ch1_freq_timer, ch1_sw_timer, ch1_vol_timer, ch1_len_timer;
 uint8_t ch1_step, ch1_vol, ch1_len, ch1_out;
 uint16_t ch1_shadow;
 bool ch1_sw_en;
+
+struct timer ch2_freq_timer, ch2_vol_timer, ch2_len_timer;
+uint8_t ch2_step, ch2_vol, ch2_len, ch2_out;
 
 void trigger_ch1() {
     reg_nr52 |= 0x01;
@@ -42,6 +47,28 @@ void trigger_ch1() {
     }
 
     if(ch1_len == 0) ch1_len = 64; // TODO: check for write
+#if DEBUG & 0x04
+    fprintf(stderr, "CH1 triggered\n");
+#endif
+}
+
+void trigger_ch2() {
+    reg_nr52 |= 0x02;
+    timer_start(&ch2_len_timer, 16384);
+
+    uint16_t freq = reg_nr13 | (reg_nr14 & 0x07) << 8;
+    timer_start(&ch2_freq_timer, (2048 - freq) * 4);
+
+    uint8_t vol_pace = reg_nr12 & 0x07;
+    timer_start(&ch2_vol_timer, 65536 * (vol_pace ? vol_pace : 8));
+
+    ch2_vol = (reg_nr22 >> 4) & 0x0F;
+    ch2_step = 0;
+
+    if(ch2_len == 0) ch2_len = 64; // TODO: check for write
+#if DEBUG & 0x04
+    fprintf(stderr, "CH2 triggered\n");
+#endif
 }
 
 uint8_t run_ch1() {
@@ -122,6 +149,55 @@ uint8_t run_ch1() {
     return ch1_out;
 }
 
+uint8_t run_ch2() {
+    if(!(reg_nr52 & 0x02)) return 0;
+
+    // Volume sweep
+    uint8_t vol_pace = reg_nr22 & 0x07;
+    if(timer_wait(&ch2_vol_timer)) {
+        timer_start(&ch2_vol_timer, 65536 * (vol_pace ? vol_pace : 8));
+        int v = (reg_nr22 & 0x08) ? ch2_vol + 1 : ch2_vol - 1;
+        if(vol_pace && v >= 0 && v < 16)
+            ch2_vol = (uint8_t)v;
+#if DEBUG & 0x04
+        fprintf(stderr, "CH2 envelope pace: %u\n", vol_pace);
+#endif
+    }
+
+    // Length timer
+    if(timer_wait(&ch2_len_timer)) {
+        timer_start(&ch2_len_timer, 16384);
+        if((reg_nr24 & 0x40) && ch2_len > 0) {
+            if(--ch2_len == 0) reg_nr52 &= ~0x02;
+#if DEBUG & 0x04
+            fprintf(stderr, "CH2 len %u\n", ch2_len);
+#endif
+        }
+    }
+
+    // Wave gen
+    uint16_t freq = reg_nr23 | (reg_nr24 & 0x07) << 8;
+    if(timer_wait(&ch2_freq_timer)) {
+        timer_start(&ch2_freq_timer, (2048 - freq) * 4);
+
+        uint8_t waveform;
+        switch(reg_nr21 & 0xC0) {
+            case 0x00: waveform = 0b00000001; break;
+            case 0x40: waveform = 0b00000011; break;
+            case 0x80: waveform = 0b11110000; break;
+            case 0xC0: waveform = 0b00111111; break;
+        }
+        if(++ch2_step >= 8) ch2_step = 0;
+        if(((waveform & (1 << ch2_step)) >> ch2_step)) ch2_out = ch2_vol;
+        else ch2_out = 0;
+#if DEBUG & 0x04
+        fprintf(stderr, "CH2 wavegen step: %u vol: %u out: %u freq: %u wave: %02x\n\n", ch2_step, ch2_vol, ch2_out, freq, reg_nr21 & 0xC0);
+#endif
+    }
+
+    return ch2_out;
+}
+
 int8_t run_ch1_dac(uint8_t ch1_res) {
     if(reg_nr12 & 0xF8) {
         return 127 - (254 * ch1_res) / 15;
@@ -129,25 +205,44 @@ int8_t run_ch1_dac(uint8_t ch1_res) {
     return 0;
 }
 
+int8_t run_ch2_dac(uint8_t ch2_res) {
+    if(reg_nr22 & 0xF8) {
+        return 127 - (254 * ch2_res) / 15;
+    }
+    return 0;
+}
+
 void init_apu() {
 }
 
-static float hp_cap;
-
-void run_apu(void (*do_sample)(int8_t)) {
+void run_apu(void (*do_sample)(int8_t, int8_t)) {
     if(reg_nr14 & 0x80) {
         reg_nr14 &= ~0x80;
         trigger_ch1();
     }
     int8_t ch1_sample = run_ch1_dac(run_ch1());
+    int8_t ch2_sample = run_ch2_dac(run_ch2());
 
-    float in  = ch1_sample / 127.0f;
-    float out = in - hp_cap;
-    hp_cap = in - out * 0.999958f;
+    int left_sum = 0, right_sum = 0, li = 0, ri = 0;
+    if(reg_nr51 & 0x01) {
+        right_sum += ch1_sample;
+        ri++;
+    }
+    if(reg_nr51 & 0x02) {
+        right_sum += ch2_sample;
+        ri++;
+    }
+    int right = ri ? right_sum / ri : 0;
 
-    float scaled = out * 127.0f;
-    if(scaled > 127.0f) scaled = 127.0f;
-    if(scaled < -127.0f) scaled = -127.0f;
+    if(reg_nr51 & 0x10) {
+        left_sum += ch1_sample;
+        li++;
+    }
+    if(reg_nr51 & 0x20) {
+        left_sum += ch2_sample;
+        li++;
+    }
+    int left = li ? left_sum / li : 0;
     
-    do_sample((int8_t)scaled);
+    do_sample((int8_t)left, (int8_t)right);
 }

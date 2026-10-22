@@ -11,6 +11,6 @@
 
 void load_rom(uint8_t* data);
 void poweron(struct registers* regs);
-void run(struct registers* regs, uint32_t* pixels, void (*do_sample)(int8_t));
+void run(struct registers* regs, uint32_t* pixels, void (*do_sample)(int8_t, int8_t));
 
 #endif

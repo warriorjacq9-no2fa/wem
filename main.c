@@ -12,7 +12,7 @@ uint32_t pixels[160*144];
 struct arguments {
     FILE* file;
     uint32_t* pixels;
-    void (*do_sample)(int8_t);
+    void (*do_sample)(int8_t, int8_t);
 };
 
 void* emu_thread(void* arg) {

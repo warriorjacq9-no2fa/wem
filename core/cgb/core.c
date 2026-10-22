@@ -18,7 +18,7 @@ void poweron(struct registers* regs) {
     init_apu();
 }
 
-void run(struct registers* regs, uint32_t* pixels, void (*do_sample)(int8_t)) {
+void run(struct registers* regs, uint32_t* pixels, void (*do_sample)(int8_t, int8_t)) {
     uint64_t last = now_ns();
     uint64_t frac = 0;
 

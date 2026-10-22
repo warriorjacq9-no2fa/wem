@@ -12,8 +12,12 @@ uint8_t
     reg_nr41, reg_nr42, reg_nr43, reg_nr44;
 uint8_t waveram[16];
 
-struct timer ch1_freq_timer, ch1_sw_timer, ch1_vol_timer, ch1_len_timer;
-uint8_t ch1_step, ch1_vol, ch1_len, ch1_out;
+struct timer fs_timer;
+uint8_t fs_step;
+
+struct timer ch1_freq_timer;
+uint8_t ch1_sw_ctr, ch1_vol_ctr, ch1_len_ctr;
+uint8_t ch1_step, ch1_vol, ch1_out;
 uint16_t ch1_shadow;
 bool ch1_sw_en;
 
@@ -26,16 +30,15 @@ uint8_t ch3_step, ch3_wave, ch3_len, ch3_out;
 void trigger_ch1() {
     if(!(reg_nr12 & 0xF8)) return;
     reg_nr52 |= 0x01;
-    timer_start(&ch1_len_timer, 16384);
 
     uint16_t freq = reg_nr13 | (reg_nr14 & 0x07) << 8;
     timer_start(&ch1_freq_timer, (2048 - freq) * 4);
 
     uint8_t vol_pace = reg_nr12 & 0x07;
-    timer_start(&ch1_vol_timer, 65536 * (vol_pace ? vol_pace : 8));
+    ch1_vol_ctr = vol_pace ? vol_pace : 8;
 
     uint8_t sw_pace = (reg_nr10 >> 4) & 0x07;
-    timer_start(&ch1_sw_timer, 32768 * (sw_pace ? sw_pace : 8));
+    ch1_sw_ctr = sw_pace ? sw_pace : 8;
 
     ch1_vol = (reg_nr12 >> 4) & 0x0F;
     ch1_step = 0;
@@ -50,7 +53,7 @@ void trigger_ch1() {
         if(freq_next > 0x07FF) reg_nr52 &= ~0x01;
     }
 
-    if(ch1_len == 0) ch1_len = 64; // TODO: check for write
+    if(ch1_len_ctr == 0) ch1_len_ctr = 64; // TODO: check for write
 #if DEBUG & 0x04
     fprintf(stderr, "CH1 triggered\n");
 #endif
@@ -92,13 +95,14 @@ void trigger_ch3() {
 #endif
 }
 
-uint8_t run_ch1() {
-    if(!(reg_nr52 & 0x01)) return 0;
+void do_ch1_vol() {
+    if(!(reg_nr52 & 0x01)) return;
 
     // Volume sweep
     uint8_t vol_pace = reg_nr12 & 0x07;
-    if(timer_wait(&ch1_vol_timer)) {
-        timer_start(&ch1_vol_timer, 65536 * (vol_pace ? vol_pace : 8));
+    if(ch1_vol_ctr > 0 && --ch1_vol_ctr == 0) {
+        ch1_vol_ctr = vol_pace ? vol_pace : 8;
+
         int v = (reg_nr12 & 0x08) ? ch1_vol + 1 : ch1_vol - 1;
         if(vol_pace && v >= 0 && v < 16)
             ch1_vol = (uint8_t)v;
@@ -106,13 +110,16 @@ uint8_t run_ch1() {
         fprintf(stderr, "CH1 envelope pace: %u\n", vol_pace);
 #endif
     }
+}
 
-    uint16_t freq = reg_nr13 | (reg_nr14 & 0x07) << 8;
+void do_ch1_sw() {
+    if(!(reg_nr52 & 0x01)) return;
 
     // Freq sweep
     uint8_t sw_pace = (reg_nr10 >> 4) & 0x07;
-    if(timer_wait(&ch1_sw_timer)) {
-        timer_start(&ch1_sw_timer, 32768 * (sw_pace ? sw_pace : 8));
+    if(ch1_sw_ctr > 0 && --ch1_sw_ctr == 0) {
+        ch1_sw_ctr = sw_pace ? sw_pace : 8;
+
         if(ch1_sw_en && sw_pace != 0) {
             uint8_t shift = reg_nr10 & 0x07;
             uint16_t freq_next = (reg_nr10 & 0x08) ?
@@ -122,7 +129,6 @@ uint8_t run_ch1() {
             if(freq_next > 0x07FF) reg_nr52 &= ~0x01;
             else if(shift != 0) {
                 ch1_shadow = freq_next;
-                freq = freq_next;
                 reg_nr13 = freq_next & 0xFF;
                 reg_nr14 &= ~0x07;
                 reg_nr14 |= (freq_next >> 8) & 0x07;
@@ -137,17 +143,25 @@ uint8_t run_ch1() {
 #endif
         }
     }
+}
+
+void do_ch1_len() {
+    if(!(reg_nr52 & 0x01)) return;
 
     // Length timer
-    if(timer_wait(&ch1_len_timer)) {
-        timer_start(&ch1_len_timer, 16384);
-        if((reg_nr14 & 0x40) && ch1_len > 0) {
-            if(--ch1_len == 0) reg_nr52 &= ~0x01;
+    if(reg_nr14 & 0x40) {
+        if(ch1_len_ctr > 0 &&--ch1_len_ctr == 0)
+            reg_nr52 &= ~0x01;
 #if DEBUG & 0x04
-            fprintf(stderr, "CH1 len %u\n", ch1_len);
+        fprintf(stderr, "CH1 len %u\n", ch1_len_ctr);
 #endif
-        }
     }
+}
+
+uint8_t run_ch1() {
+    if(!(reg_nr52 & 0x01)) return 0;
+
+    uint16_t freq = reg_nr13 | (reg_nr14 & 0x07) << 8;
 
     // Wave gen
     if(timer_wait(&ch1_freq_timer)) {
@@ -288,6 +302,27 @@ int8_t run_ch3_dac(uint8_t ch3_res) {
     return 0;
 }
 
+void run_fs() {
+    if(timer_wait(&fs_timer)) {
+        timer_start(&fs_timer, 8192);
+        switch(fs_step) {
+            case 0:
+            case 4:
+                do_ch1_len();
+                break;
+            case 2:
+            case 6:
+                do_ch1_len();
+                do_ch1_sw();
+                break;
+            case 7:
+                do_ch1_vol();
+
+        }
+        if(++fs_step >= 8) fs_step = 0;
+    }
+}
+
 void init_apu() {
 }
 
@@ -304,6 +339,9 @@ void run_apu(void (*do_sample)(int8_t, int8_t)) {
         reg_nr34 &= ~0x80;
         trigger_ch3();
     }
+
+    run_fs();
+
     int8_t ch1_sample = run_ch1_dac(run_ch1());
     int8_t ch2_sample = run_ch2_dac(run_ch2());
     int8_t ch3_sample = run_ch3_dac(run_ch3());

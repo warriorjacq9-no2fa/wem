@@ -26,7 +26,7 @@ void trigger_ch1() {
     timer_start(&ch1_vol_timer, 65536 * (vol_pace ? vol_pace : 8));
 
     uint8_t sw_pace = (reg_nr10 >> 4) & 0x07;
-    timer_start(&ch1_sw_timer, 32768 * sw_pace);
+    timer_start(&ch1_sw_timer, 32768 * (sw_pace ? sw_pace : 8));
 
     ch1_vol = (reg_nr12 >> 4) & 0x0F;
     ch1_step = 0;
@@ -132,6 +132,8 @@ int8_t run_ch1_dac(uint8_t ch1_res) {
 void init_apu() {
 }
 
+static float hp_cap;
+
 void run_apu(void (*do_sample)(int8_t)) {
     if(reg_nr14 & 0x80) {
         reg_nr14 &= ~0x80;
@@ -139,5 +141,13 @@ void run_apu(void (*do_sample)(int8_t)) {
     }
     int8_t ch1_sample = run_ch1_dac(run_ch1());
 
-    do_sample(ch1_sample);
+    float in  = ch1_sample / 127.0f;
+    float out = in - hp_cap;
+    hp_cap = in - out * 0.999958f;
+
+    float scaled = out * 127.0f;
+    if(scaled > 127.0f) scaled = 127.0f;
+    if(scaled < -127.0f) scaled = -127.0f;
+    
+    do_sample((int8_t)scaled);
 }

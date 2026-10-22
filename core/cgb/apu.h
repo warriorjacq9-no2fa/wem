@@ -9,6 +9,7 @@ extern uint8_t
     reg_nr21, reg_nr22, reg_nr23, reg_nr24,
     reg_nr30, reg_nr31, reg_nr32, reg_nr33, reg_nr34,
     reg_nr41, reg_nr42, reg_nr43, reg_nr44;
+extern uint8_t waveram[16];
 
 void init_apu();
 void run_apu(void (*do_sample)(int8_t, int8_t));

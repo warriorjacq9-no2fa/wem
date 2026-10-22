@@ -58,27 +58,27 @@ uint8_t memread(uint16_t addr) {
         case REG_TMA:       return reg_tma;
         case REG_TAC:       return reg_tac;
         case REG_IF:        return reg_if;
-        case REG_NR10:      return reg_nr10;
-        case REG_NR11:      return reg_nr11 & 0b11000000;
+        case REG_NR10:      return 0x80 | reg_nr10;
+        case REG_NR11:      return 0b00111111 | reg_nr11;
         case REG_NR12:      return reg_nr12;
-        case REG_NR13:      return 0x00;
-        case REG_NR14:      return reg_nr14 & 0b01000000;
-        case REG_NR21:      return reg_nr21;
+        case REG_NR13:      return 0xFF;
+        case REG_NR14:      return 0b10111111 | reg_nr14;
+        case REG_NR21:      return 0b00111111 | reg_nr21;
         case REG_NR22:      return reg_nr22;
-        case REG_NR23:      return reg_nr23;
-        case REG_NR24:      return reg_nr24;
-        case REG_NR30:      return reg_nr30;
-        case REG_NR31:      return reg_nr31;
-        case REG_NR32:      return reg_nr32;
-        case REG_NR33:      return reg_nr33;
-        case REG_NR34:      return reg_nr34;
-        case REG_NR41:      return reg_nr41;
+        case REG_NR23:      return 0xFF;
+        case REG_NR24:      return 0b10111111 | reg_nr24;
+        case REG_NR30:      return 0b01111111 | reg_nr30;
+        case REG_NR31:      return 0xFF;
+        case REG_NR32:      return 0b10011111 | reg_nr32;
+        case REG_NR33:      return 0xFF;
+        case REG_NR34:      return 0b10111111 | reg_nr34;
+        case REG_NR41:      return 0xFF;
         case REG_NR42:      return reg_nr42;
         case REG_NR43:      return reg_nr43;
-        case REG_NR44:      return reg_nr44;
+        case REG_NR44:      return 0b10111111 | reg_nr44;
         case REG_NR50:      return reg_nr50;
         case REG_NR51:      return reg_nr51;
-        case REG_NR52:      return reg_nr52;
+        case REG_NR52:      return 0b01110000 | reg_nr52;
         case REG_PPU_LCDC:  return reg_ppu_lcdc;
         case REG_PPU_STAT:  return reg_ppu_stat;
         case REG_PPU_SCY:   return reg_ppu_scy;
@@ -116,7 +116,9 @@ uint8_t memread(uint16_t addr) {
             else if(addr < 0xFEA0) {
                 if(oam_block) return 0xFF;
                 else return oam[addr - 0xFE00];
-            } else if(addr > 0xFF7F && addr < 0xFFFF)
+            } else if(addr >= 0xFF30 && addr < 0xFF40)
+                return waveram[addr - 0xFF30];
+            else if(addr > 0xFF7F)
                 return hram[addr - 0xFF80];
 
             return 0;
@@ -153,7 +155,7 @@ void memwrite(uint16_t addr, uint8_t val) {
         case REG_NR44:      reg_nr44 = val; break;
         case REG_NR50:      reg_nr50 = val; break;
         case REG_NR51:      reg_nr51 = val; break;
-        case REG_NR52:      reg_nr52 = val; break;
+        case REG_NR52:      reg_nr52 = val & 0b10000000; break;
         case REG_PPU_LCDC:  reg_ppu_lcdc = val; break;
         case REG_PPU_STAT:  reg_ppu_stat = val & 0b01111000; break;
         case REG_PPU_SCY:   reg_ppu_scy = val; break;
@@ -181,9 +183,11 @@ void memwrite(uint16_t addr, uint8_t val) {
                 wram1[addr - 0xD000] = val;
             else if(addr < 0xFE00)
                 memwrite(addr - 0x2000, val); // Echo RAM from 0xC000
-            else if(addr < 0xFEA0 && !vram_block)
-                oam[addr - 0xFE00] = val; // TODO: check PPU state
-            else if(addr > 0xFF7F && addr < 0xFFFF)
+            else if(addr < 0xFEA0 && !oam_block)
+                oam[addr - 0xFE00] = val;
+            else if(addr >= 0xFF30 && addr < 0xFF40)
+                waveram[addr - 0xFF30] = val;
+            else if(addr > 0xFF7F)
                 hram[addr - 0xFF80] = val;
     }
 }

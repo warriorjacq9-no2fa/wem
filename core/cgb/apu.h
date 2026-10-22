@@ -1,6 +1,7 @@
 #ifndef APU_H
 #define APU_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 extern uint8_t
@@ -10,6 +11,8 @@ extern uint8_t
     reg_nr30, reg_nr31, reg_nr32, reg_nr33, reg_nr34,
     reg_nr41, reg_nr42, reg_nr43, reg_nr44;
 extern uint8_t waveram[16];
+extern bool
+    wrote_nr14, wrote_nr24, wrote_nr34, wrote_nr44;
 
 void init_apu();
 void run_apu(void (*do_sample)(int8_t, int8_t));

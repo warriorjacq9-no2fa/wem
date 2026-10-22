@@ -1,5 +1,6 @@
 // TODO: clean up code, timer phase alignment
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <timer.h>
 #include <stdio.h>
@@ -10,6 +11,8 @@ uint8_t
     reg_nr21, reg_nr22, reg_nr23, reg_nr24,
     reg_nr30, reg_nr31, reg_nr32, reg_nr33, reg_nr34,
     reg_nr41, reg_nr42, reg_nr43, reg_nr44;
+bool
+    wrote_nr14, wrote_nr24, wrote_nr34, wrote_nr44;
 uint8_t waveram[16];
 
 struct timer fs_timer;
@@ -161,6 +164,11 @@ void do_ch1_sw() {
 uint8_t run_ch1() {
     if(!(reg_nr52 & 0x01)) return 0;
 
+    if(wrote_nr14 && (reg_nr14 & 0x40)) {
+        ch1_len_ctr = 64 - (reg_nr11 & 0x3F);
+        wrote_nr14 = false;
+    }
+
     uint16_t freq = reg_nr13 | (reg_nr14 & 0x07) << 8;
 
     // Wave gen
@@ -188,6 +196,11 @@ uint8_t run_ch1() {
 uint8_t run_ch2() {
     if(!(reg_nr52 & 0x02)) return 0;
 
+    if(wrote_nr24 && (reg_nr24 & 0x40)) {
+        ch2_len_ctr = 64 - (reg_nr21 & 0x3F);
+        wrote_nr24 = false;
+    }
+
     // Wave gen
     uint16_t freq = reg_nr23 | (reg_nr24 & 0x07) << 8;
     if(timer_wait(&ch2_freq_timer)) {
@@ -213,6 +226,11 @@ uint8_t run_ch2() {
 
 uint8_t run_ch3() {
     if(!(reg_nr52 & 0x04)) return 0;
+
+    if(wrote_nr34 && (reg_nr34 & 0x40)) {
+        ch3_len_ctr = 64 - (reg_nr31 & 0x3F);
+        wrote_nr34 = false;
+    }
 
     // Wave gen
     uint16_t freq = reg_nr33 | (reg_nr34 & 0x07) << 8;
@@ -299,24 +317,20 @@ void init_apu() {
 }
 
 void run_apu(void (*do_sample)(int8_t, int8_t)) {
-    if(reg_nr14 & 0x80) {
-        reg_nr14 &= ~0x80;
-        trigger_ch1();
-    }
-    if(reg_nr24 & 0x80) {
-        reg_nr24 &= ~0x80;
-        trigger_ch2();
-    }
-    if(reg_nr34 & 0x80) {
-        reg_nr34 &= ~0x80;
-        trigger_ch3();
-    }
+    if(wrote_nr14 && (reg_nr14 & 0x80)) trigger_ch1();
+    if(wrote_nr24 && (reg_nr24 & 0x80)) trigger_ch2();
+    if(wrote_nr34 && (reg_nr34 & 0x80)) trigger_ch3();
 
     run_fs();
 
     int8_t ch1_sample = run_ch1_dac(run_ch1());
     int8_t ch2_sample = run_ch2_dac(run_ch2());
     int8_t ch3_sample = run_ch3_dac(run_ch3());
+
+    if(wrote_nr14) wrote_nr14 = false;
+    if(wrote_nr24) wrote_nr24 = false;
+    if(wrote_nr34) wrote_nr34 = false;
+    if(wrote_nr44) wrote_nr44 = false;
 
     int left_sum = 0, right_sum = 0, li = 0, ri = 0;
     if(reg_nr51 & 0x01) {

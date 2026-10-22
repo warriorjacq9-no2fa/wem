@@ -95,19 +95,32 @@ void trigger_ch3() {
 #endif
 }
 
-void do_ch1_vol() {
-    if(!(reg_nr52 & 0x01)) return;
+void do_vol(uint8_t channel, uint8_t nrx2, uint8_t* vol_ctr, uint8_t* vol) {
+    if(!(reg_nr52 & (1 << (channel - 1)))) return;
 
     // Volume sweep
-    uint8_t vol_pace = reg_nr12 & 0x07;
-    if(ch1_vol_ctr > 0 && --ch1_vol_ctr == 0) {
-        ch1_vol_ctr = vol_pace ? vol_pace : 8;
+    uint8_t vol_pace = nrx2 & 0x07;
+    if(*vol_ctr > 0 && --(*vol_ctr) == 0) {
+        *vol_ctr = vol_pace ? vol_pace : 8;
 
-        int v = (reg_nr12 & 0x08) ? ch1_vol + 1 : ch1_vol - 1;
+        int v = (nrx2 & 0x08) ? *vol + 1 : *vol - 1;
         if(vol_pace && v >= 0 && v < 16)
-            ch1_vol = (uint8_t)v;
+            *vol = (uint8_t)v;
 #if DEBUG & 0x04
-        fprintf(stderr, "CH1 envelope pace: %u\n", vol_pace);
+        fprintf(stderr, "CH%d envelope pace: %u\n", channel, vol_pace);
+#endif
+    }
+}
+
+void do_len(uint8_t channel, uint8_t nrx4, uint8_t* len_ctr) {
+    if(!(reg_nr52 & (1 << (channel - 1)))) return;
+
+    // Length timer
+    if(nrx4 & 0x40) {
+        if(*len_ctr > 0 && --(*len_ctr) == 0)
+            reg_nr52 &= ~(1 << (channel - 1));
+#if DEBUG & 0x04
+        fprintf(stderr, "CH%d len %u\n", channel, *len_ctr);
 #endif
     }
 }
@@ -142,19 +155,6 @@ void do_ch1_sw() {
             fprintf(stderr, "CH1 sweep pace: %u shift: %u freq_next: %u shadow: %u\n", sw_pace, shift, freq_next, ch1_shadow);
 #endif
         }
-    }
-}
-
-void do_ch1_len() {
-    if(!(reg_nr52 & 0x01)) return;
-
-    // Length timer
-    if(reg_nr14 & 0x40) {
-        if(ch1_len_ctr > 0 &&--ch1_len_ctr == 0)
-            reg_nr52 &= ~0x01;
-#if DEBUG & 0x04
-        fprintf(stderr, "CH1 len %u\n", ch1_len_ctr);
-#endif
     }
 }
 
@@ -308,15 +308,15 @@ void run_fs() {
         switch(fs_step) {
             case 0:
             case 4:
-                do_ch1_len();
+                do_len(1, reg_nr14, &ch1_len_ctr);
                 break;
             case 2:
             case 6:
-                do_ch1_len();
+                do_len(1, reg_nr14, &ch1_len_ctr);
                 do_ch1_sw();
                 break;
             case 7:
-                do_ch1_vol();
+                do_vol(1, reg_nr12, &ch1_vol_ctr, &ch1_vol);
 
         }
         if(++fs_step >= 8) fs_step = 0;

@@ -1,12 +1,15 @@
+#include "core.h"
 #include <time.h>
 #include "cpu.h"
 #include "memmap.h"
 #include "ppu.h"
 #include "apu.h"
 
-#define CLOCK_SPEED_HZ 4194304
-
-static clock_t last_time;
+static uint64_t now_ns() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ull + ts.tv_nsec;
+}
 
 void poweron(struct registers* regs) {
     *regs = (struct registers) {0};
@@ -16,18 +19,23 @@ void poweron(struct registers* regs) {
 }
 
 void run(struct registers* regs, uint32_t* pixels, void (*do_sample)(int8_t)) {
-    last_time = clock();
+    uint64_t last = now_ns();
+    uint64_t frac = 0;
+
     while(1) {
-        clock_t now = clock();
-        double elapsed = (double)(now - last_time) / CLOCKS_PER_SEC;
-        unsigned int elapsed_cycles = (unsigned int)(elapsed * CLOCK_SPEED_HZ);
-        if(elapsed_cycles > 0) {
-            for(unsigned int i = 0; i < elapsed_cycles; i++) {
-                run_cpu(regs);
-                run_ppu(pixels);
-                run_apu(do_sample);
-            }
-            last_time = now;
+        uint64_t now = now_ns();
+        frac += (now - last) * CPU_HZ;
+        last = now;
+
+        uint64_t cycles = frac / 1000000000ull;
+        frac %= 1000000000ull;
+
+        if(cycles > CPU_HZ / 20) cycles = CPU_HZ / 20;
+
+        for(uint64_t i = 0; i < cycles; i++) {
+            run_cpu(regs);
+            run_ppu(pixels);
+            run_apu(do_sample);
         }
     }
 }

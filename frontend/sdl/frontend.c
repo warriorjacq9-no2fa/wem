@@ -5,13 +5,10 @@
 
 static SDL_AudioStream* stream;
 
-#define BATCH_SZ 128
-#define PREFILL 64
+#define BATCH_SZ 512
 
 static int8_t batch[BATCH_SZ];
-static int8_t stale;
 static int nbatch;
-static bool started;
 
 static int acc;
 
@@ -19,22 +16,11 @@ void do_sample(int8_t sample) {
     acc += OUT_HZ;
     if(acc < CPU_HZ) return;
     acc -= CPU_HZ;
+
     batch[nbatch++] = sample;
-    stale = sample;
-
-    if(nbatch < BATCH_SZ) {
-        SDL_PutAudioStreamData(stream, &stale, 1);
-        return;
-    }
-    SDL_PutAudioStreamData(stream, batch, nbatch);
-    nbatch = 0;
-
-    if(!started) {
-        if(SDL_GetAudioStreamQueued(stream) >= PREFILL) {
-            SDL_ResumeAudioStreamDevice(stream);
-            started = true;
-        }
-        return;
+    if(nbatch == BATCH_SZ) {
+        SDL_PutAudioStreamData(stream, batch, nbatch);
+        nbatch = 0;
     }
 }
 

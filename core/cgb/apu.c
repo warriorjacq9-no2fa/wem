@@ -268,6 +268,8 @@ uint8_t run_ch3() {
 int8_t run_ch1_dac(uint8_t ch1_res) {
     if(reg_nr12 & 0xF8) {
         return 127 - (254 * ch1_res) / 15;
+    } else {
+        reg_nr52 &= ~0x01;
     }
     return 0;
 }
@@ -275,6 +277,8 @@ int8_t run_ch1_dac(uint8_t ch1_res) {
 int8_t run_ch2_dac(uint8_t ch2_res) {
     if(reg_nr22 & 0xF8) {
         return 127 - (254 * ch2_res) / 15;
+    } else {
+        reg_nr52 &= ~0x02;
     }
     return 0;
 }
@@ -282,6 +286,8 @@ int8_t run_ch2_dac(uint8_t ch2_res) {
 int8_t run_ch3_dac(uint8_t ch3_res) {
     if(reg_nr30 & 0x80) {
         return 127 - (254 * ch3_res) / 15;
+    } else {
+        reg_nr52 &= ~0x04;
     }
     return 0;
 }
@@ -317,6 +323,19 @@ void init_apu() {
 }
 
 void run_apu(void (*do_sample)(int8_t, int8_t)) {
+    if(!(reg_nr52 & 0x80)) {
+        reg_nr50 = reg_nr51 =
+        reg_nr10 = reg_nr12 = reg_nr13 = reg_nr14 =
+        reg_nr22 = reg_nr23 = reg_nr24 =
+        reg_nr30 = reg_nr32 = reg_nr33 = reg_nr34 =
+        reg_nr42 = reg_nr43 = reg_nr44 = 0;
+        reg_nr11 &= ~0xC0;
+        reg_nr21 &= ~0xC0;
+        reg_nr31 &= ~0xC0;
+        reg_nr41 &= ~0xC0;
+        reg_nr52 &= ~0x0F;
+        return;
+    }
     if(wrote_nr14 && (reg_nr14 & 0x80)) trigger_ch1();
     if(wrote_nr24 && (reg_nr24 & 0x80)) trigger_ch2();
     if(wrote_nr34 && (reg_nr34 & 0x80)) trigger_ch3();

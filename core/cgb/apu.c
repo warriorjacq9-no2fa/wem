@@ -21,11 +21,13 @@ uint8_t ch1_step, ch1_vol, ch1_out;
 uint16_t ch1_shadow;
 bool ch1_sw_en;
 
-struct timer ch2_freq_timer, ch2_vol_timer, ch2_len_timer;
-uint8_t ch2_step, ch2_vol, ch2_len, ch2_out;
+struct timer ch2_freq_timer;
+uint8_t ch2_vol_ctr, ch2_len_ctr;
+uint8_t ch2_step, ch2_vol, ch2_out;
 
-struct timer ch3_freq_timer, ch3_len_timer;
-uint8_t ch3_step, ch3_wave, ch3_len, ch3_out;
+struct timer ch3_freq_timer;
+uint8_t ch3_len_ctr;
+uint8_t ch3_step, ch3_wave, ch3_out;
 
 void trigger_ch1() {
     if(!(reg_nr12 & 0xF8)) return;
@@ -62,18 +64,17 @@ void trigger_ch1() {
 void trigger_ch2() {
     if(!(reg_nr22 & 0xF8)) return;
     reg_nr52 |= 0x02;
-    timer_start(&ch2_len_timer, 16384);
 
     uint16_t freq = reg_nr23 | (reg_nr24 & 0x07) << 8;
     timer_start(&ch2_freq_timer, (2048 - freq) * 4);
 
     uint8_t vol_pace = reg_nr22 & 0x07;
-    timer_start(&ch2_vol_timer, 65536 * (vol_pace ? vol_pace : 8));
+    ch2_vol_ctr = vol_pace ? vol_pace : 8;
 
     ch2_vol = (reg_nr22 >> 4) & 0x0F;
     ch2_step = 0;
 
-    if(ch2_len == 0) ch2_len = 64; // TODO: check for write
+    if(ch2_len_ctr == 0) ch2_len_ctr = 64; // TODO: check for write
 #if DEBUG & 0x04
     fprintf(stderr, "CH2 triggered\n");
 #endif
@@ -82,14 +83,13 @@ void trigger_ch2() {
 void trigger_ch3() {
     if(!(reg_nr30 & 0x80)) return;
     reg_nr52 |= 0x04;
-    timer_start(&ch3_len_timer, 16384);
 
     uint16_t freq = reg_nr33 | (reg_nr34 & 0x07) << 8;
     timer_start(&ch3_freq_timer, (2048 - freq) * 4);
 
     ch3_step = 1;
 
-    if(ch3_len == 0) ch3_len = 64; // TODO: check for write
+    if(ch3_len_ctr == 0) ch3_len_ctr = 64; // TODO: check for write
 #if DEBUG & 0x04
     fprintf(stderr, "CH3 triggered\n");
 #endif
@@ -188,29 +188,6 @@ uint8_t run_ch1() {
 uint8_t run_ch2() {
     if(!(reg_nr52 & 0x02)) return 0;
 
-    // Volume sweep
-    uint8_t vol_pace = reg_nr22 & 0x07;
-    if(timer_wait(&ch2_vol_timer)) {
-        timer_start(&ch2_vol_timer, 65536 * (vol_pace ? vol_pace : 8));
-        int v = (reg_nr22 & 0x08) ? ch2_vol + 1 : ch2_vol - 1;
-        if(vol_pace && v >= 0 && v < 16)
-            ch2_vol = (uint8_t)v;
-#if DEBUG & 0x04
-        fprintf(stderr, "CH2 envelope pace: %u\n", vol_pace);
-#endif
-    }
-
-    // Length timer
-    if(timer_wait(&ch2_len_timer)) {
-        timer_start(&ch2_len_timer, 16384);
-        if((reg_nr24 & 0x40) && ch2_len > 0) {
-            if(--ch2_len == 0) reg_nr52 &= ~0x02;
-#if DEBUG & 0x04
-            fprintf(stderr, "CH2 len %u\n", ch2_len);
-#endif
-        }
-    }
-
     // Wave gen
     uint16_t freq = reg_nr23 | (reg_nr24 & 0x07) << 8;
     if(timer_wait(&ch2_freq_timer)) {
@@ -236,17 +213,6 @@ uint8_t run_ch2() {
 
 uint8_t run_ch3() {
     if(!(reg_nr52 & 0x04)) return 0;
-
-    // Length timer
-    if(timer_wait(&ch3_len_timer)) {
-        timer_start(&ch3_len_timer, 16384);
-        if((reg_nr34 & 0x40) && ch3_len > 0) {
-            if(--ch3_len == 0) reg_nr52 &= ~0x04;
-#if DEBUG & 0x04
-            fprintf(stderr, "CH3 len %u\n", ch3_len);
-#endif
-        }
-    }
 
     // Wave gen
     uint16_t freq = reg_nr33 | (reg_nr34 & 0x07) << 8;
@@ -309,14 +275,20 @@ void run_fs() {
             case 0:
             case 4:
                 do_len(1, reg_nr14, &ch1_len_ctr);
+                do_len(2, reg_nr24, &ch2_len_ctr);
+                do_len(3, reg_nr34, &ch3_len_ctr);
                 break;
             case 2:
             case 6:
                 do_len(1, reg_nr14, &ch1_len_ctr);
+                do_len(2, reg_nr24, &ch2_len_ctr);
+                do_len(3, reg_nr34, &ch3_len_ctr);
                 do_ch1_sw();
                 break;
             case 7:
                 do_vol(1, reg_nr12, &ch1_vol_ctr, &ch1_vol);
+                do_vol(2, reg_nr22, &ch2_vol_ctr, &ch2_vol);
+                break;
 
         }
         if(++fs_step >= 8) fs_step = 0;

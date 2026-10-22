@@ -76,6 +76,7 @@ struct insn {
     enum op op;
     enum param p1;
     enum param p2;
+    unsigned int cycles;
 };
 
 extern const struct insn INSNS[256];

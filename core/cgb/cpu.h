@@ -6,6 +6,7 @@
 
 enum cpu_state {
     S_RUN,
+    S_WAIT,
     S_STOP,
     S_HALT,
 };

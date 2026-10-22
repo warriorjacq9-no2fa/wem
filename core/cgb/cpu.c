@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include "instructions.h"
 #include "memmap.h"
+#include "timer.h"
 
 struct typed_ptr {
     union {
@@ -298,9 +299,10 @@ struct typed_ptr enum_param(enum param p, struct registers* regs) {
 
 bool pfx;
 
-void run_insn_pfx(struct registers* regs, uint8_t opcode) {
+unsigned int run_insn_pfx(struct registers* regs, uint8_t opcode) {
     pfx = false;
     uint8_t* param = NULL;
+    unsigned int cycles = 2;
     int scratch;
     switch(opcode & 0x07) {
         case 0x00: param = &regs->b; break;
@@ -309,6 +311,7 @@ void run_insn_pfx(struct registers* regs, uint8_t opcode) {
         case 0x03: param = &regs->e; break;
         case 0x04: param = &regs->h; break;
         case 0x05: param = &regs->l; break;
+        case 0x06: cycles = 4; break;
         case 0x07: param = &regs->a; break;
         default: break;
     }
@@ -479,6 +482,7 @@ void run_insn_pfx(struct registers* regs, uint8_t opcode) {
             case 0x70: scratch = 0x40; goto _do_bit_hl;
             case 0x78: scratch = 0x80; goto _do_bit_hl;
 _do_bit_hl:
+                cycles -= 1;
                 if((val & (scratch & 0xFF)) == 0)
                     regs->f |= FLAG_Z;
                 else
@@ -691,16 +695,16 @@ _do_set:
                 break;
         }
     }
+    return cycles;
 }
 
-void run_insn(struct registers* regs) {
+unsigned int run_insn(struct registers* regs) {
 #if DEBUG & 0x01
     uint16_t pc = regs->pc;
 #endif
     uint8_t opcode = memread(regs->pc++);
     if(pfx) {
-        run_insn_pfx(regs, opcode);
-        return;
+        return run_insn_pfx(regs, opcode);
     }
     struct insn i = INSNS[opcode];
     struct typed_ptr p1 = enum_param(i.p1, regs);
@@ -713,6 +717,7 @@ void run_insn(struct registers* regs) {
     } else {
         p2 = enum_param(i.p2, regs);
     }
+    unsigned int cycles = i.cycles;
     int scratch;
 #if DEBUG & 0x01
     char p1_str[8] = {0}, p2_str[8] = {0};
@@ -1061,6 +1066,7 @@ void run_insn(struct registers* regs) {
             regs->f &= ~(FLAG_N | FLAG_H);
             break;
         case JR:
+            cycles += 1;
             switch(i.p1) {
                 case F_NZ:
                     if(!(regs->f & FLAG_Z))
@@ -1079,11 +1085,13 @@ void run_insn(struct registers* regs) {
                         regs->pc += *p2.s8;
                     break;
                 default:
+                    cycles -= 1;
                     regs->pc += *p1.s8;
                     break;
             }
             break;
         case JP:
+            cycles += 1;
             switch(i.p1) {
                 case F_NZ:
                     if(!(regs->f & FLAG_Z))
@@ -1102,6 +1110,7 @@ void run_insn(struct registers* regs) {
                         regs->pc = *p2.u16;
                     break;
                 default:
+                    cycles -= 1;
                     regs->pc = *p1.u16;
                     break;
             }
@@ -1133,6 +1142,7 @@ void run_insn(struct registers* regs) {
             }
             break;
 _do_call:
+            cycles += 3;
             regs->sp -= 2;
             memwrite(regs->sp, regs->pc & 0xFF);
             memwrite(regs->sp + 1, regs->pc >> 8);
@@ -1162,6 +1172,7 @@ _do_call:
             }
             break;
 _do_ret:
+            cycles += 3;
             regs->pc = memread(regs->sp) | (memread(regs->sp + 1) << 8);
             regs->sp += 2;
             break;
@@ -1203,6 +1214,7 @@ _do_ret:
         default:
             break;
     }
+    return cycles;
 }
 
 enum int_status {
@@ -1234,11 +1246,20 @@ enum int_status run_int(struct registers* regs) {
     return INT_NONE;
 }
 
+static struct timer wait_timer;
 void run_cpu(struct registers* regs) {
     enum int_status in = run_int(regs);
     switch(regs->state) {
         case S_RUN:
-            run_insn(regs);
+            timer_start(&wait_timer,
+                run_insn(regs) * 4
+            );
+            regs->state = S_WAIT;
+            break;
+        case S_WAIT:
+            if(timer_wait(&wait_timer)) {
+                regs->state = S_RUN;
+            }
             break;
         case S_STOP:
             // TODO: wait for joypad button

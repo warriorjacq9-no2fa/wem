@@ -1,4 +1,4 @@
-// TODO: clean up code
+// TODO: clean up code, timer phase alignment
 
 #include <stdint.h>
 #include <timer.h>
@@ -19,6 +19,9 @@ bool ch1_sw_en;
 
 struct timer ch2_freq_timer, ch2_vol_timer, ch2_len_timer;
 uint8_t ch2_step, ch2_vol, ch2_len, ch2_out;
+
+struct timer ch3_freq_timer, ch3_len_timer;
+uint8_t ch3_step, ch3_sample, ch3_len, ch3_out;
 
 void trigger_ch1() {
     reg_nr52 |= 0x01;
@@ -56,10 +59,10 @@ void trigger_ch2() {
     reg_nr52 |= 0x02;
     timer_start(&ch2_len_timer, 16384);
 
-    uint16_t freq = reg_nr13 | (reg_nr14 & 0x07) << 8;
+    uint16_t freq = reg_nr23 | (reg_nr24 & 0x07) << 8;
     timer_start(&ch2_freq_timer, (2048 - freq) * 4);
 
-    uint8_t vol_pace = reg_nr12 & 0x07;
+    uint8_t vol_pace = reg_nr22 & 0x07;
     timer_start(&ch2_vol_timer, 65536 * (vol_pace ? vol_pace : 8));
 
     ch2_vol = (reg_nr22 >> 4) & 0x0F;
@@ -68,6 +71,21 @@ void trigger_ch2() {
     if(ch2_len == 0) ch2_len = 64; // TODO: check for write
 #if DEBUG & 0x04
     fprintf(stderr, "CH2 triggered\n");
+#endif
+}
+
+void trigger_ch3() {
+    reg_nr52 |= 0x04;
+    timer_start(&ch3_len_timer, 16384);
+
+    uint16_t freq = reg_nr33 | (reg_nr34 & 0x07) << 8;
+    timer_start(&ch3_freq_timer, (2048 - freq) * 4);
+
+    ch3_step = 1;
+
+    if(ch3_len == 0) ch3_len = 64; // TODO: check for write
+#if DEBUG & 0x04
+    fprintf(stderr, "CH3 triggered\n");
 #endif
 }
 
@@ -198,6 +216,53 @@ uint8_t run_ch2() {
     return ch2_out;
 }
 
+uint8_t run_ch3() {
+    if(!(reg_nr52 & 0x04)) return 0;
+
+    // Length timer
+    if(timer_wait(&ch3_len_timer)) {
+        timer_start(&ch3_len_timer, 16384);
+        if((reg_nr34 & 0x40) && ch3_len > 0) {
+            if(--ch3_len == 0) reg_nr52 &= ~0x04;
+#if DEBUG & 0x04
+            fprintf(stderr, "CH3 len %u\n", ch3_len);
+#endif
+        }
+    }
+
+    // Wave gen
+    uint16_t freq = reg_nr33 | (reg_nr34 & 0x07) << 8;
+    if(timer_wait(&ch3_freq_timer)) {
+        timer_start(&ch3_freq_timer, (2048 - freq) * 2);
+
+        switch(reg_nr32 & 0x60) {
+            case 0x00: 
+                ch3_out = 0;
+                break;
+            case 0x20:
+                ch3_out = ch3_sample;
+                break;
+            case 0x40:
+                ch3_out = ch3_sample >> 1;
+                break;
+            case 0x60:
+                ch3_out = ch3_sample >> 2;
+        }
+
+        if(ch3_step % 2) {
+            ch3_sample = (waveram[ch3_step / 2] >> 4) & 0x0F;
+        } else {
+            ch3_sample = waveram[ch3_step / 2] & 0x0F;
+        }
+        if(++ch3_step >= 32) ch3_step = 0;
+#if DEBUG & 0x04
+        fprintf(stderr, "CH3 wavegen step: %u out: %u freq: %u sample: %02x\n\n", ch3_step, ch3_out, freq, ch3_sample);
+#endif
+    }
+
+    return ch2_out;
+}
+
 int8_t run_ch1_dac(uint8_t ch1_res) {
     if(reg_nr12 & 0xF8) {
         return 127 - (254 * ch1_res) / 15;
@@ -208,6 +273,13 @@ int8_t run_ch1_dac(uint8_t ch1_res) {
 int8_t run_ch2_dac(uint8_t ch2_res) {
     if(reg_nr22 & 0xF8) {
         return 127 - (254 * ch2_res) / 15;
+    }
+    return 0;
+}
+
+int8_t run_ch3_dac(uint8_t ch3_res) {
+    if(reg_nr30 & 0x80) {
+        return 127 - (254 * ch3_res) / 15;
     }
     return 0;
 }
@@ -232,7 +304,13 @@ void run_apu(void (*do_sample)(int8_t, int8_t)) {
         right_sum += ch2_sample;
         ri++;
     }
+    if(reg_nr51 & 0x04) {
+        right_sum += ch3_sample;
+        ri++;
+    }
     int right = ri ? right_sum / ri : 0;
+    uint8_t vol_right = (reg_nr50 & 0x07) + 1;
+    right = (right / vol_right) * 8;
 
     if(reg_nr51 & 0x10) {
         left_sum += ch1_sample;
@@ -242,7 +320,13 @@ void run_apu(void (*do_sample)(int8_t, int8_t)) {
         left_sum += ch2_sample;
         li++;
     }
+    if(reg_nr51 & 0x40) {
+        left_sum += ch3_sample;
+        li++;
+    }
     int left = li ? left_sum / li : 0;
+    uint8_t vol_left = ((reg_nr50 >> 4) & 0x07) + 1;
+    left = (left / vol_left) * 8;
     
     do_sample((int8_t)left, (int8_t)right);
 }

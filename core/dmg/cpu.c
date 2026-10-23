@@ -5,9 +5,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <timer.h>
 #include "instructions.h"
 #include "memmap.h"
-#include "timer.h"
 
 struct typed_ptr {
     union {

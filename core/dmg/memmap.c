@@ -2,12 +2,10 @@
 #include <string.h>
 #include "ppu.h"
 #include "apu.h"
+#include "timer.h"
 
 static uint8_t reg_p1;
 static uint8_t reg_sb, reg_sc;
-static uint8_t
-    reg_div, reg_tima,
-    reg_tma, reg_tac;
 static uint8_t reg_if;
 static uint8_t reg_bank;
 static uint8_t reg_dma;
@@ -130,7 +128,7 @@ void memwrite(uint16_t addr, uint8_t val) {
         case REG_P1:        reg_p1 = (val & 0b00110000) | (reg_p1 & 0b11001111); break;
         case REG_SB:        reg_sb = val; break;
         case REG_SC:        reg_sc = (val & 0b10000001) | (reg_sc & 0b01111110); break;
-        case REG_DIV:       reg_div = val; break;
+        case REG_DIV:       reg_div = 0x00; break;
         case REG_TIMA:      reg_tima = val; break;
         case REG_TMA:       reg_tma = val; break;
         case REG_TAC:       reg_tac = val; break;

@@ -57,7 +57,7 @@ uint8_t memread(uint16_t addr) {
         case REG_TIMA:      return reg_tima;
         case REG_TMA:       return reg_tma;
         case REG_TAC:       return reg_tac;
-        case REG_IF:        return reg_if;
+        case REG_IF:        return 0b11100000 | reg_if;
         case REG_NR10:      return 0x80 | reg_nr10;
         case REG_NR11:      return 0b00111111 | reg_nr11;
         case REG_NR12:      return reg_nr12;
@@ -92,7 +92,7 @@ uint8_t memread(uint16_t addr) {
         case REG_PPU_WX:    return reg_ppu_wx;
         case REG_DMA:       return reg_dma;
         case REG_BANK:      return reg_bank;
-        case REG_IE:        return reg_ie;
+        case REG_IE:        return 0b11100000 | reg_ie;
         default:
             if(addr < 0x4000) {
                 if(!(reg_bank & 0x01) && (addr < 0x0100)) {

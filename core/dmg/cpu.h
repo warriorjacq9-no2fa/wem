@@ -31,6 +31,7 @@ struct registers {
     };
     uint16_t sp, pc;
     bool ime;
+    bool ime_pending;
     enum cpu_state state;
 };
 #else

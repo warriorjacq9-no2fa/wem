@@ -29,21 +29,25 @@ struct typed_ptr {
 };
 
 void typed_ptr_dbg(char* s, struct typed_ptr p) {
-    switch(p.type) {
-        case U8:
-            snprintf(s, 8,"(%02x)", *p.u8);
-            break;
-        case S8:
-            snprintf(s, 8,"(%s%x)", (*p.s8 < 0) ? "-" : "", (*p.s8 < 0) ? -*p.s8 : *p.s8);
-            break;
-        case U16:
-            snprintf(s, 8,"(%04x)", *p.u16);
-            break;
-        case S16:
-            snprintf(s, 8,"(%s%x)", (*p.s16 < 0) ? "-" : "", (*p.s16 < 0) ? -*p.s16 : *p.s16);
-            break;
-        case NUL:
-            break;
+    if(p.addr) {
+        snprintf(s, 8, "[%04x]", p.a);
+    } else {
+        switch(p.type) {
+            case U8:
+                snprintf(s, 8,"(%02x)", *p.u8);
+                break;
+            case S8:
+                snprintf(s, 8,"(%s%x)", (*p.s8 < 0) ? "-" : "", (*p.s8 < 0) ? -*p.s8 : *p.s8);
+                break;
+            case U16:
+                snprintf(s, 8,"(%04x)", *p.u16);
+                break;
+            case S16:
+                snprintf(s, 8,"(%s%x)", (*p.s16 < 0) ? "-" : "", (*p.s16 < 0) ? -*p.s16 : *p.s16);
+                break;
+            case NUL:
+                break;
+        }
     }
 }
 
@@ -1209,7 +1213,7 @@ _do_ret:
             regs->ime = false;
             break;
         case EI:
-            regs->ime = true;
+            regs->ime_pending = true;
             break;
         case RETI:
             regs->pc = memread(regs->sp) | (memread(regs->sp + 1) << 8);
@@ -1244,11 +1248,18 @@ enum int_status {
 };
 
 enum int_status run_int(struct registers* regs) {
-    uint8_t in = memread(REG_IE) & memread(REG_IF);
+    uint8_t in = (memread(REG_IE) & memread(REG_IF)) & 0b00011111;
     if(in) {
         if(regs->ime) {
             uint8_t bit = in & -in;
-            uint8_t handler = 0x40 + ((bit - 1) << 3);
+            uint16_t handler = 0;
+            switch(bit) {
+                case 0x01: handler = 0x40; break;
+                case 0x02: handler = 0x48; break;
+                case 0x04: handler = 0x50; break;
+                case 0x08: handler = 0x58; break;
+                case 0x10: handler = 0x60; break;
+            }
 
             regs->ime = false;
             memwrite(REG_IF, memread(REG_IF) & ~bit);
@@ -1257,7 +1268,9 @@ enum int_status run_int(struct registers* regs) {
             memwrite(regs->sp, regs->pc & 0xFF);
             memwrite(regs->sp + 1, regs->pc >> 8);
             regs->pc = handler;
-
+#if DEBUG & 0x01
+            fprintf(stderr, "Interrupt %02x\n", handler);
+#endif
             return INT_TRIGGERED;
         } else {
             return INT_PENDING;
@@ -1268,12 +1281,20 @@ enum int_status run_int(struct registers* regs) {
 
 static struct timer wait_timer;
 void run_cpu(struct registers* regs) {
-    enum int_status in = run_int(regs);
     switch(regs->state) {
         case S_RUN:
+            if(regs->ime_pending) {
+                regs->ime = true;
+                regs->ime_pending = false;
+            }
             timer_start(&wait_timer,
                 run_insn(regs) * 4
             );
+            if(run_int(regs) == INT_TRIGGERED) {
+                timer_start(&wait_timer, 5 * 4);
+                regs->state = S_WAIT;
+                break;
+            }
             regs->state = S_WAIT;
             break;
         case S_WAIT:
@@ -1284,12 +1305,14 @@ void run_cpu(struct registers* regs) {
         case S_STOP:
             // TODO: wait for joypad button
             break;
-        case S_HALT:
+        case S_HALT: {
+            enum int_status in = run_int(regs);
             if(in == INT_TRIGGERED) {
                 regs->state = S_RUN;
             } else if(in == INT_PENDING) {
                 regs->state = S_RUN; // TODO: HALT bug
             }
             break;
+        }
     }
 }

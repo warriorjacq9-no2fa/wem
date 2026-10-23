@@ -14,6 +14,8 @@ extern uint8_t waveram[16];
 extern bool
     wrote_nr14, wrote_nr24, wrote_nr34, wrote_nr44;
 
+void apu_power_on();
+void apu_power_off();
 void init_apu();
 void run_apu(void (*do_sample)(int8_t, int8_t));
 

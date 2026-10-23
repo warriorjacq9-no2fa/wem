@@ -121,43 +121,51 @@ uint8_t memread(uint16_t addr) {
             else if(addr > 0xFF7F)
                 return hram[addr - 0xFF80];
 
-            return 0;
+            return 0xFF;
     }
 }
 
 void memwrite(uint16_t addr, uint8_t val) {
     switch(addr) {
-        case REG_P1:        reg_p1 = val & 0b00110000; break;
+        case REG_P1:        reg_p1 = (val & 0b00110000) | (reg_p1 & 0b11001111); break;
         case REG_SB:        reg_sb = val; break;
-        case REG_SC:        reg_sc = val & 0b10000001; break;
+        case REG_SC:        reg_sc = (val & 0b10000001) | (reg_sc & 0b01111110); break;
         case REG_DIV:       reg_div = val; break;
         case REG_TIMA:      reg_tima = val; break;
         case REG_TMA:       reg_tma = val; break;
         case REG_TAC:       reg_tac = val; break;
         case REG_IF:        reg_if = val; break;
-        case REG_NR10:      reg_nr10 = val; break;
-        case REG_NR11:      reg_nr11 = val; break;
-        case REG_NR12:      reg_nr12 = val; break;
-        case REG_NR13:      reg_nr13 = val; break;
-        case REG_NR14:      reg_nr14 = val; wrote_nr14 = true; break;
-        case REG_NR21:      reg_nr21 = val; break;
-        case REG_NR22:      reg_nr22 = val; break;
-        case REG_NR23:      reg_nr23 = val; break;
-        case REG_NR24:      reg_nr24 = val; wrote_nr24 = true; break;
-        case REG_NR30:      reg_nr30 = val; break;
+        case REG_NR10:      if(reg_nr52 & 0x80) reg_nr10 = val; break;
+        case REG_NR11:      if(reg_nr52 & 0x80) reg_nr11 = val; else reg_nr11 = (val & 0x3F) | (reg_nr11 & 0xC0); break;
+        case REG_NR12:      if(reg_nr52 & 0x80) reg_nr12 = val; break;
+        case REG_NR13:      if(reg_nr52 & 0x80) reg_nr13 = val; break;
+        case REG_NR14:      if(reg_nr52 & 0x80) reg_nr14 = val; wrote_nr14 = true; break;
+        case REG_NR21:      if(reg_nr52 & 0x80) reg_nr21 = val; else reg_nr21 = (val & 0x3F) | (reg_nr21 & 0xC0); break;
+        case REG_NR22:      if(reg_nr52 & 0x80) reg_nr22 = val; break;
+        case REG_NR23:      if(reg_nr52 & 0x80) reg_nr23 = val; break;
+        case REG_NR24:      if(reg_nr52 & 0x80) reg_nr24 = val; wrote_nr24 = true; break;
+        case REG_NR30:      if(reg_nr52 & 0x80) reg_nr30 = val; break;
         case REG_NR31:      reg_nr31 = val; break;
-        case REG_NR32:      reg_nr32 = val; break;
-        case REG_NR33:      reg_nr33 = val; break;
-        case REG_NR34:      reg_nr34 = val; wrote_nr34 = true; break;
-        case REG_NR41:      reg_nr41 = val; break;
-        case REG_NR42:      reg_nr42 = val; break;
-        case REG_NR43:      reg_nr43 = val; break;
-        case REG_NR44:      reg_nr44 = val; wrote_nr44 = true; break;
-        case REG_NR50:      reg_nr50 = val; break;
-        case REG_NR51:      reg_nr51 = val; break;
-        case REG_NR52:      reg_nr52 = val & 0b10000000; break;
+        case REG_NR32:      if(reg_nr52 & 0x80) reg_nr32 = val; break;
+        case REG_NR33:      if(reg_nr52 & 0x80) reg_nr33 = val; break;
+        case REG_NR34:      if(reg_nr52 & 0x80) reg_nr34 = val; wrote_nr34 = true; break;
+        case REG_NR41:      if(reg_nr52 & 0x80) reg_nr41 = val; else reg_nr41 = (val & 0x3F) | (reg_nr41 & 0xC0); break;
+        case REG_NR42:      if(reg_nr52 & 0x80) reg_nr42 = val; break;
+        case REG_NR43:      if(reg_nr52 & 0x80) reg_nr43 = val; break;
+        case REG_NR44:      if(reg_nr52 & 0x80) reg_nr44 = val; wrote_nr44 = true; break;
+        case REG_NR50:      if(reg_nr52 & 0x80) reg_nr50 = val; break;
+        case REG_NR51:      if(reg_nr52 & 0x80) reg_nr51 = val; break;
+        case REG_NR52:
+            if((reg_nr52 & 0x80) && !(val & 0x80)) {
+                apu_power_off();
+                reg_nr52 &= ~0x80;
+            } else if(!(reg_nr52 & 0x80) && (val & 0x80)) {
+                apu_power_on();
+                reg_nr52 |= 0x80;
+            }
+            break;
         case REG_PPU_LCDC:  reg_ppu_lcdc = val; break;
-        case REG_PPU_STAT:  reg_ppu_stat = val & 0b01111000; break;
+        case REG_PPU_STAT:  reg_ppu_stat = (val & 0b01111000) | (reg_ppu_stat & 0b10000111); break;
         case REG_PPU_SCY:   reg_ppu_scy = val; break;
         case REG_PPU_SCX:   reg_ppu_scx = val; break;
         case REG_PPU_LY:    break;
@@ -173,9 +181,9 @@ void memwrite(uint16_t addr, uint8_t val) {
         default:
             if(addr < 0x8000)
                 return;
-            else if(addr < 0xA000 && !vram_block)
-                vram[addr - 0x8000] = val;
-            else if(addr < 0xC000)
+            else if(addr < 0xA000) {
+                if(!vram_block) vram[addr - 0x8000] = val;
+            } else if(addr < 0xC000)
                 eram[addr - 0xA000] = val;
             else if(addr < 0xD000)
                 wram0[addr - 0xC000] = val;
@@ -183,9 +191,9 @@ void memwrite(uint16_t addr, uint8_t val) {
                 wram1[addr - 0xD000] = val;
             else if(addr < 0xFE00)
                 memwrite(addr - 0x2000, val); // Echo RAM from 0xC000
-            else if(addr < 0xFEA0 && !oam_block)
-                oam[addr - 0xFE00] = val;
-            else if(addr >= 0xFF30 && addr < 0xFF40)
+            else if(addr < 0xFEA0) {
+                if(!oam_block) oam[addr - 0xFE00] = val;
+            } else if(addr >= 0xFF30 && addr < 0xFF40)
                 waveram[addr - 0xFF30] = val;
             else if(addr > 0xFF7F)
                 hram[addr - 0xFF80] = val;

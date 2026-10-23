@@ -88,7 +88,7 @@ void trigger_ch3() {
     reg_nr52 |= 0x04;
 
     uint16_t freq = reg_nr33 | (reg_nr34 & 0x07) << 8;
-    timer_start(&ch3_freq_timer, (2048 - freq) * 4);
+    timer_start(&ch3_freq_timer, (2048 - freq) * 2);
 
     ch3_step = 1;
 
@@ -319,23 +319,29 @@ void run_fs() {
     }
 }
 
+void apu_power_off() {
+    reg_nr50 = reg_nr51 =
+    reg_nr10 = reg_nr12 = reg_nr13 = reg_nr14 =
+    reg_nr22 = reg_nr23 = reg_nr24 =
+    reg_nr30 = reg_nr32 = reg_nr33 = reg_nr34 =
+    reg_nr42 = reg_nr43 = reg_nr44 = 0;
+    reg_nr11 &= 0x3F;
+    reg_nr21 &= 0x3F;
+    reg_nr41 &= 0x3F;
+    reg_nr52 = 0;
+    wrote_nr14 = wrote_nr24 = wrote_nr34 = wrote_nr44 = false;
+}
+
+void apu_power_on() {
+    fs_step = 0;
+}
+
 void init_apu() {
 }
 
 void run_apu(void (*do_sample)(int8_t, int8_t)) {
-    if(!(reg_nr52 & 0x80)) {
-        reg_nr50 = reg_nr51 =
-        reg_nr10 = reg_nr12 = reg_nr13 = reg_nr14 =
-        reg_nr22 = reg_nr23 = reg_nr24 =
-        reg_nr30 = reg_nr32 = reg_nr33 = reg_nr34 =
-        reg_nr42 = reg_nr43 = reg_nr44 = 0;
-        reg_nr11 &= ~0xC0;
-        reg_nr21 &= ~0xC0;
-        reg_nr31 &= ~0xC0;
-        reg_nr41 &= ~0xC0;
-        reg_nr52 &= ~0x0F;
-        return;
-    }
+    if(!(reg_nr52 & 0x80)) return;
+
     if(wrote_nr14 && (reg_nr14 & 0x80)) trigger_ch1();
     if(wrote_nr24 && (reg_nr24 & 0x80)) trigger_ch2();
     if(wrote_nr34 && (reg_nr34 & 0x80)) trigger_ch3();

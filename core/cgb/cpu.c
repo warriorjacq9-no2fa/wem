@@ -249,7 +249,20 @@ struct typed_ptr enum_param(enum param p, struct registers* regs) {
             break;
         case SP_SIMM8:
             res.u16 = &tmp;
-            *res.u16 = regs->sp + (int8_t)memread(regs->pc++);
+            *res.u16 = regs->sp + (int8_t)memread(regs->pc);
+            regs->f &= ~(FLAG_Z | FLAG_N);
+
+            if((regs->sp & 0x0F) + (memread(regs->pc) & 0x0F) > 0x0F)
+                regs->f |= FLAG_H;
+            else
+                regs->f &= ~FLAG_H;
+
+            if((regs->sp & 0xFF) + memread(regs->pc) > 0xFF)
+                regs->f |= FLAG_C;
+            else
+                regs->f &= ~FLAG_C;
+
+            regs->pc++;
             res.type = U16;
             break;
         case IMM16:
@@ -387,7 +400,7 @@ unsigned int run_insn_pfx(struct registers* regs, uint8_t opcode) {
                 
                 memwrite(regs->hl, scratch);
 
-                if(scratch == 0)
+                if((scratch & 0xFF) == 0)
                     regs->f |= FLAG_Z;
                 else
                     regs->f &= ~FLAG_Z;
@@ -423,7 +436,7 @@ unsigned int run_insn_pfx(struct registers* regs, uint8_t opcode) {
                 
                 memwrite(regs->hl, scratch);
 
-                if(scratch == 0)
+                if((scratch & 0xFF) == 0)
                     regs->f |= FLAG_Z;
                 else
                     regs->f &= ~FLAG_Z;
@@ -817,33 +830,24 @@ unsigned int run_insn(struct registers* regs) {
         case ADC:
         case ADD:
             regs->f &= ~FLAG_N;
-
-            if(i.op == ADC) {
-                if((*p1.u8 & 0xF) + (*p2.u8 & 0xF) +
-                    (regs->f & FLAG_C ? 1 : 0) > 0xF)
-                    regs->f |= FLAG_H;
-                else
-                    regs->f &= ~FLAG_H;
-            } else {
-                if(p1.type == U16) {
-                    if((*p1.u16 & 0x0F00) + (*p2.u8 & 0x0F00) > 0x0F00)
-                        regs->f |= FLAG_H;
-                    else
-                        regs->f &= ~FLAG_H;
-                } else {
-                    if((*p1.u8 & 0xF) + (*p2.u8 & 0xF) > 0xF)
-                        regs->f |= FLAG_H;
-                    else
-                        regs->f &= ~FLAG_H;
-                }
-            }
+            
             switch(p1.type) {
                 case U8:
-                    if(i.op == ADC)
+                    if(i.op == ADC) {
                         scratch = *p1.u8 + *p2.u8 + 
                             (regs->f & FLAG_C ? 1 : 0);
+                    if((*p1.u8 & 0xF) + (*p2.u8 & 0xF) +
+                        (regs->f & FLAG_C ? 1 : 0) > 0xF)
+                        regs->f |= FLAG_H;
                     else
+                        regs->f &= ~FLAG_H;
+                    } else {
                         scratch = *p1.u8 + *p2.u8;
+                        if((*p1.u8 & 0xF) + (*p2.u8 & 0xF) > 0xF)
+                            regs->f |= FLAG_H;
+                        else
+                            regs->f &= ~FLAG_H;
+                    }
 
                     if(scratch > 0xFF)
                         regs->f |= FLAG_C;
@@ -864,14 +868,29 @@ unsigned int run_insn(struct registers* regs) {
                     if(p2.type == S8) {
                         scratch = *p1.u16 + *p2.s8;
                         regs->f &= ~FLAG_Z;
+
+                        if((*p1.u16 & 0x0F) + (*p2.u8 & 0x0F) > 0x0F)
+                            regs->f |= FLAG_H;
+                        else
+                            regs->f &= ~FLAG_H;
+
+                        if((*p1.u16 & 0xFF) + *p2.u8 > 0xFF)
+                            regs->f |= FLAG_C;
+                        else
+                            regs->f &= ~FLAG_C;
                     } else {
                         scratch = *p1.u16 + *p2.u16;
+                        
+                        if((*p1.u16 & 0x0FFF) + (*p2.u16 & 0x0FFF) > 0x0FFF)
+                            regs->f |= FLAG_H;
+                        else
+                            regs->f &= ~FLAG_H;
+                        
+                        if(scratch > 0xFFFF)
+                            regs->f |= FLAG_C;
+                        else
+                            regs->f &= ~FLAG_C;
                     }
-
-                    if(scratch > 0xFFFF)
-                        regs->f |= FLAG_C;
-                    else
-                        regs->f &= ~FLAG_C;
 
                     *p1.u16 = (uint16_t)scratch;
                     break;
@@ -1036,21 +1055,21 @@ unsigned int run_insn(struct registers* regs) {
                 if((scratch & 0x0F) > 0x09 || regs->f & FLAG_H)
                     scratch += 0x06;
 
-                if(scratch > 0x99 || regs->f & FLAG_C) {
+                if(scratch > 0x9F || regs->f & FLAG_C) {
                     scratch += 0x60;
                     regs->f |= FLAG_C;
                 }
 
             }
 
-            if(scratch == 0)
+            if((scratch & 0xFF) == 0)
                 regs->f |= FLAG_Z;
             else
                 regs->f &= ~FLAG_Z;
             
             regs->f &= ~FLAG_H;
 
-            regs->a = scratch;
+            regs->a = scratch & 0xFF;
             break;
         case CPL:
             regs->a = ~regs->a;
@@ -1178,6 +1197,7 @@ _do_ret:
             break;
         case POP:
             *p1.u16 = memread(regs->sp) | (memread(regs->sp + 1) << 8);
+            if(i.p1 == AF) *p1.u16 &= 0xFFF0;
             regs->sp += 2;
             break;
         case PUSH:

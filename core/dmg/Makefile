@@ -4,7 +4,7 @@ instructions.o \
 memmap.o \
 ppu.o \
 apu.o \
-timer.o \
+tmr.o \
 core.o
 
 CORE_HEADERS = \
@@ -14,7 +14,7 @@ instructions.h \
 memmap.h \
 ppu.h \
 apu.h \
-timer.h
+tmr.h
 
 .PHONY: clean
 

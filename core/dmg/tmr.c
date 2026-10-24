@@ -19,7 +19,7 @@ void tmr_do_edge() {
     prev_signal = signal;
 }
 
-void run_timer() {
+void run_tmr() {
     if(timer_wait(&reload_timer)) {
         reg_tima = reg_tma;
         memwrite(REG_IF, memread(REG_IF) | 0x04);

@@ -4,7 +4,7 @@
 #include "memmap.h"
 #include "ppu.h"
 #include "apu.h"
-#include "timer.h"
+#include "tmr.h"
 
 static uint64_t now_ns() {
     struct timespec ts;
@@ -34,7 +34,7 @@ void run(struct registers* regs, uint32_t* pixels, void (*do_sample)(int8_t, int
         if(cycles > CPU_HZ / 20) cycles = CPU_HZ / 20;
 
         for(uint64_t i = 0; i < cycles; i++) {
-            run_timer();
+            run_tmr();
             run_cpu(regs);
             run_ppu(pixels);
             run_apu(do_sample);

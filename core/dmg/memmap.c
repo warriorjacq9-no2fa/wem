@@ -2,7 +2,7 @@
 #include <string.h>
 #include "ppu.h"
 #include "apu.h"
-#include "timer.h"
+#include "tmr.h"
 
 static uint8_t reg_p1;
 static uint8_t reg_sb, reg_sc;

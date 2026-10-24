@@ -1,11 +1,16 @@
 #include <timer.h>
 
 void timer_start(struct timer* t, unsigned int ticks) {
+    t->done = false;
     t->c = ticks;
 }
 
 bool timer_wait(struct timer* t) {
-    if(t->c == 0) return true;
+    if(t->done) return false;
+    if(t->c == 0) {
+        t->done = true;
+        return true;
+    }
     t->c--;
     return false;
 }

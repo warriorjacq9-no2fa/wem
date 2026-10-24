@@ -5,6 +5,7 @@
 
 struct timer {
     unsigned int c;
+    bool done;
 };
 
 void timer_start(struct timer* t, unsigned int ticks);

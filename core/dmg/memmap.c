@@ -51,7 +51,7 @@ uint8_t memread(uint16_t addr) {
         case REG_P1:        return reg_p1 & 0b11001111;
         case REG_SB:        return reg_sb;
         case REG_SC:        return reg_sc;
-        case REG_DIV:       return reg_div;
+        case REG_DIV:       return tmr_ctr >> 8;
         case REG_TIMA:      return reg_tima;
         case REG_TMA:       return reg_tma;
         case REG_TAC:       return reg_tac;
@@ -128,10 +128,10 @@ void memwrite(uint16_t addr, uint8_t val) {
         case REG_P1:        reg_p1 = (val & 0b00110000) | (reg_p1 & 0b11001111); break;
         case REG_SB:        reg_sb = val; break;
         case REG_SC:        reg_sc = (val & 0b10000001) | (reg_sc & 0b01111110); break;
-        case REG_DIV:       reg_div = 0x00; break;
-        case REG_TIMA:      reg_tima = val; break;
+        case REG_DIV:       tmr_ctr = 0x00; tmr_do_edge(); break;
+        case REG_TIMA:      reg_tima = val; wrote_tima = true; break;
         case REG_TMA:       reg_tma = val; break;
-        case REG_TAC:       reg_tac = val; break;
+        case REG_TAC:       reg_tac = val; tmr_do_edge(); break;
         case REG_IF:        reg_if = val; break;
         case REG_NR10:      if(reg_nr52 & 0x80) reg_nr10 = val; break;
         case REG_NR11:      if(reg_nr52 & 0x80) reg_nr11 = val; else reg_nr11 = (val & 0x3F) | (reg_nr11 & 0xC0); break;

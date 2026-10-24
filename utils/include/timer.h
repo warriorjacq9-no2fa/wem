@@ -9,6 +9,7 @@ struct timer {
 };
 
 void timer_start(struct timer* t, unsigned int ticks);
+void timer_cancel(struct timer* t);
 bool timer_wait(struct timer* t);
 
 #endif

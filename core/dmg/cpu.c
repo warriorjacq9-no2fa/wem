@@ -1273,6 +1273,9 @@ enum int_status run_int(struct registers* regs) {
 #endif
             return INT_TRIGGERED;
         } else {
+#if DEBUG & 0x01
+            fprintf(stderr, "Interrupt pending, IF=%02x\n", memread(REG_IF));
+#endif
             return INT_PENDING;
         }
     }
@@ -1283,19 +1286,19 @@ static struct timer wait_timer;
 void run_cpu(struct registers* regs) {
     switch(regs->state) {
         case S_RUN:
-            if(regs->ime_pending) {
-                regs->ime = true;
-                regs->ime_pending = false;
-            }
-            timer_start(&wait_timer,
-                run_insn(regs) * 4
-            );
             if(run_int(regs) == INT_TRIGGERED) {
                 timer_start(&wait_timer, 5 * 4);
                 regs->state = S_WAIT;
                 break;
             }
-            regs->state = S_WAIT;
+            timer_start(&wait_timer,
+                run_insn(regs) * 4
+            );
+            if(regs->ime_pending) {
+                regs->ime = true;
+                regs->ime_pending = false;
+            }
+            if(regs->state != S_HALT) regs->state = S_WAIT;
             break;
         case S_WAIT:
             if(timer_wait(&wait_timer)) {
@@ -1308,7 +1311,8 @@ void run_cpu(struct registers* regs) {
         case S_HALT: {
             enum int_status in = run_int(regs);
             if(in == INT_TRIGGERED) {
-                regs->state = S_RUN;
+                timer_start(&wait_timer, 5 * 4);
+                regs->state = S_WAIT;
             } else if(in == INT_PENDING) {
                 regs->state = S_RUN; // TODO: HALT bug
             }
